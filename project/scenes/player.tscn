@@ -1,0 +1,36 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.3
+height = 1.5
+
+[sub_resource type="QuadMesh" id="QuadMesh_fullscreen"]
+size = Vector2(2, 2)
+
+[node name="Player" type="CharacterBody3D"]
+script = ExtResource("1_player")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="CamYaw" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.35, 0)
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CamYaw"]
+spring_length = 5.2
+margin = 0.35
+
+[node name="Camera3D" type="Camera3D" parent="CamYaw/SpringArm3D"]
+current = true
+fov = 52.0
+near = 0.08
+far = 200.0
+
+[node name="InkPass" type="MeshInstance3D" parent="CamYaw/SpringArm3D/Camera3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.5)
+extra_cull_margin = 16384.0
+cast_shadow = 0
+mesh = SubResource("QuadMesh_fullscreen")

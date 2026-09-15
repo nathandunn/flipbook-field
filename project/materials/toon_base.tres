@@ -1,0 +1,18 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+[ext_resource type="Shader" path="res://shaders/toon.gdshader" id="1_toon"]
+[ext_resource type="Material" path="res://materials/ink_outline.tres" id="2_ink"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_toon")
+shader_parameter/base_color = Color(0.84, 0.8, 0.72, 1)
+shader_parameter/shadow_tint = Color(0.40, 0.385, 0.56, 1)
+shader_parameter/band_count = 3
+shader_parameter/band_softness = 0.03
+shader_parameter/rim_strength = 0.35
+shader_parameter/rim_start = 0.6
+shader_parameter/rim_color = Color(1, 0.98, 0.92, 1)
+shader_parameter/grain_strength = 0.06
+shader_parameter/grain_scale = 320.0
+next_pass = ExtResource("2_ink")

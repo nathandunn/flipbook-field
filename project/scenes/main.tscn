@@ -1,0 +1,107 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
+[ext_resource type="Script" path="res://scripts/dialogue.gd" id="2_dialogue"]
+[ext_resource type="Script" path="res://scripts/touch_controls.gd" id="3_touch"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_paper"]
+sky_top_color = Color(0.78, 0.81, 0.8, 1)
+sky_horizon_color = Color(0.941, 0.914, 0.831, 1)
+sky_curve = 0.18
+ground_bottom_color = Color(0.66, 0.65, 0.58, 1)
+ground_horizon_color = Color(0.902, 0.871, 0.788, 1)
+ground_curve = 0.06
+sun_angle_max = 6.0
+sun_curve = 0.2
+
+[sub_resource type="Sky" id="Sky_paper"]
+sky_material = SubResource("ProceduralSkyMaterial_paper")
+
+[sub_resource type="Environment" id="Environment_field"]
+background_mode = 2
+sky = SubResource("Sky_paper")
+ambient_light_source = 3
+ambient_light_sky_contribution = 0.4
+ambient_light_energy = 0.25
+tonemap_mode = 0
+fog_enabled = true
+fog_light_color = Color(0.878, 0.859, 0.792, 1)
+fog_light_energy = 1.0
+fog_density = 0.0032
+fog_sky_affect = 0.0
+adjustment_enabled = true
+adjustment_brightness = 1.0
+adjustment_contrast = 1.1
+adjustment_saturation = 0.9
+
+[node name="Main" type="Node3D"]
+script = ExtResource("1_world")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_field")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.788, -0.616, 0, 0.616, 0.788, 0, 6, 0)
+light_color = Color(1, 0.957, 0.875, 1)
+light_energy = 1.35
+shadow_enabled = true
+shadow_bias = 0.04
+shadow_normal_bias = 1.5
+directional_shadow_max_distance = 70.0
+
+[node name="Generated" type="Node3D" parent="."]
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Dialogue" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_dialogue")
+
+[node name="Body" type="Label" parent="UI/Dialogue"]
+layout_mode = 0
+offset_right = 430.0
+offset_bottom = 30.0
+theme_override_colors/font_color = Color(0.071, 0.063, 0.102, 1)
+theme_override_font_sizes/font_size = 20
+text = " "
+
+[node name="Speaker" type="Label" parent="UI/Dialogue"]
+layout_mode = 0
+offset_right = 120.0
+offset_bottom = 20.0
+theme_override_colors/font_color = Color(0.984, 0.969, 0.925, 1)
+theme_override_font_sizes/font_size = 13
+text = " "
+
+[node name="Touch" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_touch")
+
+[node name="Controls" type="Label" parent="UI"]
+offset_left = 18.0
+offset_top = 14.0
+offset_right = 620.0
+offset_bottom = 36.0
+theme_override_colors/font_color = Color(0.129, 0.114, 0.184, 0.6)
+theme_override_font_sizes/font_size = 13
+text = "WASD move   ·   Shift run   ·   mouse look   ·   E talk / advance   ·   R reshuffle   ·   T ink pass   ·   Esc free mouse"
+
+[node name="Prompt" type="Label" parent="UI/Dialogue"]
+layout_mode = 0
+offset_right = 240.0
+offset_bottom = 24.0
+theme_override_colors/font_color = Color(0.984, 0.969, 0.925, 1)
+theme_override_font_sizes/font_size = 17
+text = " "
