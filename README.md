@@ -1,72 +1,111 @@
-# Flipbook Field
+# The Outdoor Office
 
-A Godot 4.4 blockout with a graphic-novel look: a block character walks up to a
-group of block characters standing in a field under a tree and talks to them in
-comic speech balloons. The whole scene and the conversation are generated from a
-seed, so they reshuffle on demand.
+A Godot 4.4 game with a graphic-novel look. An office made of natural elements —
+slab-stone desks, stump chairs, a break room under a canopy, a stream for a water
+cooler — and a flat rock you give PowerPoint presentations from. You and your work
+nemesis take turns gathering material and winning people over, then present to
+whoever turns up. Three rounds. Whoever ends with the most people wins.
 
-**Live:** https://flipbook-field.apps.precogsoftwareservices.com
+## Run it
 
-## Repo layout
+Open the folder in Godot 4.4 (Forward+) and press F5.
 
-```
-web/           exported Godot web build (committed - the hub cannot run Godot)
-project/       Godot 4.4 source; open this folder in the editor
-build.sh       re-export the web build
-Dockerfile     nginx:alpine serving web/
-nginx.conf     gzip_static + correct wasm MIME type
-headers.caddy  COOP/COEP, folded into the Caddy block by deploy.sh
-```
+| Key | |
+|---|---|
+| `WASD` | move (camera-relative) |
+| `Shift` | run |
+| mouse | orbit camera (click once to capture the pointer) |
+| `E` / `Space` | act at a station · present at the rock |
+| `R` | restart the match |
+| `T` | toggle the screen-space ink pass |
+| `Esc` | release the mouse |
 
-## Controls
+On a phone: left thumb drags a floating stick to walk, the right side drags to
+look, and the **TALK** button acts.
 
-Desktop: `WASD` move, `Shift` run, mouse look (click once to capture the
-pointer), `E` / `Space` talk and advance, `R` reshuffle, `T` toggle the ink
-pass, `Esc` release the mouse.
+## The loop
 
-Phone: left thumb drags a floating stick to walk, the right side drags to look,
-the **TALK** button starts a conversation, and a tap anywhere advances a line.
+One round is: your turn → your talk → their turn (played out at 3x so you can
+read it) → their talk → scoreboard.
 
-## Renderer
+**Four actions a turn.** Walk to a station and spend one:
 
-The desktop project runs **Forward+**. Web and mobile have no Vulkan path, so
-they run **Compatibility** (WebGL 2), set per-platform in `project.godot`. The
-screen-space ink pass needs the normal-roughness buffer and so exists only under
-Forward+; it detects the live renderer at startup and switches itself off rather
-than rendering as an opaque sheet across the camera. The inverted-hull outlines
-still draw, so the web build looks nearly identical - it just loses the interior
-crease lines where the trunk meets the grass.
+- **Desk** — take a prop for your slides. Also makes the three nearest neutrals
+  curious, because a pile of interesting stuff is what draws people over.
+- **Stream** — the water cooler. Converts *curious* neutrals standing nearby into
+  followers. Cold ones just shrug, so this is the close, not the opener.
+- **Break room** — rally. A wage slave wanders in, and your followers get resolve
+  against being flipped for the round.
 
-## Rebuilding
+Then walk to the rock and present, which ends your turn. Present early with fewer
+slides or spend everything first — that is the turn's real decision.
 
-```
-./build.sh /path/to/godot4
-```
+**The talk.** Your crowd assembles: your people, plus curious neutrals drawn in by
+how big the crowd looks, plus anyone who came to boo. You play three props. Every
+person wants one of *data, story, gadget, snacks*, and a slide lands in proportion
+to how much of the room was hoping for that. Between slides a heckler interrupts:
+ignore it for a small guaranteed boo, or clap back — lands and the room roars,
+misses and you lose someone.
 
-That re-exports `web/` and regenerates `index.wasm.gz` / `index.js.gz`. Both
-`.gz` files must be rebuilt with every export or nginx's `gzip_static` will hand
-out a stale compressed copy of a fresh wasm.
+Then it resolves. Curious neutrals convert on the claps-to-boos ratio, and boo
+pressure net of applause peels followers off you and turns them into haters.
 
-## The look, in short
+## The archetypes
 
-1. `project/shaders/toon.gdshader` - banded half-lambert with a *tinted* (cool
-   purple) shadow rather than a darker one.
-2. `project/shaders/outline.gdshader` - inverted-hull ink, expanded along
+Neutrals are the currency. Everything else is a pump or a drain on them.
+
+| | |
+|---|---|
+| **Neutral** | Contested. Has a curiosity level and a taste. |
+| **Follower** | Claps. Can be flipped by boo pressure. |
+| **Wage slave** | Attends, never claps, never flips — too tired. Pure crowd size, which is what draws the spectators who are actually worth winning. |
+| **Influencer** | Warms a neutral every turn, for free, anywhere on the map. Comes from closing somebody who was *fully* curious — work for it. |
+| **Lover** | Claps, immune to flipping, shields one other person, and makes your comebacks land. A follower becomes one after a talk that really landed. |
+| **Hater** | Boos, and turns boo pressure into flips. |
+| **Bully** | Sent by your nemesis to sit at the front. Takes one of yours whatever you do. |
+
+Everyone wears a floating pip: colour is allegiance, shape and height are
+archetype. Cold neutrals have a small pale pip that grows as they warm up, which
+is the only tell you get before you try to close them.
+
+## Where the knobs are
+
+`scripts/arch.gd` holds every number that decides whether this is fun — clap
+values, boo values, the curiosity threshold, how many a stream visit can close,
+how much crowd size pulls in spectators. Nothing about balance lives in
+behaviour code.
+
+- `scripts/office.gd` — the world. Layout is rules, not placements, so moving a
+  station is one constant.
+- `scripts/game.gd` — turn loop, the three verbs, the nemesis, scoring.
+- `scripts/presentation.gd` — the talk, the hecklers, the scoreboards.
+- `scripts/person.gd` — one figure: archetype, curiosity, walking.
+- `materials/toon_base.tres` — restyles the whole scene at once.
+
+The nemesis AI in `_nemesis_choose` is deliberately legible: gather until it has
+slides, close whenever there is anybody to close, rally when it is ahead. You
+should be able to predict it after one round and plan against it. If it starts
+feeling unbeatable, that function is where to look first.
+
+## The look
+
+1. `shaders/toon.gdshader` — banded half-lambert with a *tinted* (cool purple)
+   shadow rather than a darker one.
+2. `shaders/outline.gdshader` — inverted-hull ink, expanded along
    `normalize(VERTEX)` because box meshes have split normals and expanding along
    those leaves a gap at every corner. Thickness is angular, so line weight holds
    constant with distance.
-3. `project/shaders/ink_post.gdshader` - Forward+ only; depth + normal edge
-   detect for interior creases.
+3. `shaders/ink_post.gdshader` — Forward+ only; depth + normal edge detect for
+   interior creases. Detects the live renderer at startup and switches itself off
+   on web and mobile rather than rendering as an opaque sheet.
 
-Animation is quantised to 12 fps in `block_figure.gd`. One `floor()` call, and
-it is most of what makes the figures read as drawn rather than simulated.
+Animation is quantised to 12 fps in `block_figure.gd`. One `floor()` call, and it
+is most of what makes the figures read as drawn rather than simulated.
 
-## Swapping in hand-drawn art
+## Known gaps
 
-`BlockFigure` is the stand-in. The joint names and local axes are the contract a
-replacement has to match: arms and legs pivot at shoulder and hip, `rotation.x`
-swings forward, `-Z` is the direction the character faces. Anything that keeps
-those drops into `Npc.create()` and `Player._ready()` without touching the rest.
-
-`radial_expand` on the outline shader should be turned **off** for organic meshes
-with smooth normals; it is on because everything here is boxes.
+- Round 3 plays exactly like round 1. It probably wants escalation.
+- Losing a talk costs you the people it costs you and nothing else.
+- Influencers only appear from a full-curiosity close and lovers only from a talk
+  that went genuinely well, so a bad first round can leave you without either.
+- The nemesis never targets a specific person; it plays the board, not you.

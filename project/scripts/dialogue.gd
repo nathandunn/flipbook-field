@@ -80,8 +80,8 @@ func advance() -> void:
 	var tw := create_tween()
 	tw.tween_property(body, "visible_ratio", 1.0, dur)
 
-	if _speaker_node is Npc:
-		(_speaker_node as Npc).start_talking(dur + 1.2)
+	if _speaker_node is Person:
+		(_speaker_node as Person).start_talking(dur + 1.2)
 
 
 ## True if the current line was still typing itself out (in which case the first

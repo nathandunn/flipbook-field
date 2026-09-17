@@ -5,8 +5,8 @@ config_version=5
 
 [application]
 
-config/name="Flipbook Field"
-config/description="A blockout scene: one block character talking to a group in a field with a tree. Toon shading + ink outlines."
+config/name="The Outdoor Office"
+config/description="An office made of natural elements. Give PowerPoint presentations from a rock, win people over, out-present your nemesis."
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.4", "Forward Plus")
 

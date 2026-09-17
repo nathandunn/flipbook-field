@@ -21,6 +21,9 @@ const PAPER := Color("fbf7ec")
 const INK := Color("12101a")
 
 var player: Player
+## Cleared while a panel is up, or a tap meant for a button also fires the world
+## interact underneath it.
+var enabled: bool = true
 
 var _enabled: bool = false
 var _stick_touch: int = -1
@@ -53,7 +56,7 @@ func _in_stick_zone(p: Vector2) -> bool:
 
 
 func _input(event: InputEvent) -> void:
-	if not _enabled or player == null:
+	if not _enabled or not enabled or player == null:
 		return
 
 	if event is InputEventScreenTouch:
@@ -108,7 +111,7 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	if not _enabled:
+	if not _enabled or not enabled:
 		return
 
 	if _stick_touch != -1:
