@@ -23,6 +23,20 @@ Open the folder in Godot 4.4 (Forward+) and press F5.
 On a phone: left thumb drags a floating stick to walk, the right side drags to
 look, and the **TALK** button acts.
 
+## Two ways to take a turn
+
+Every turn opens on the **planner**: four slots, each tapped to cycle through
+*desk · stream · break room · skip*. Press **GO** and the character walks the
+route itself while you watch — a bar at the bottom says which leg it is on, and
+**Take over** stops it where it stands and gives you back whatever actions are
+unspent. **Play it myself** closes the planner and you walk it by hand, exactly
+as before.
+
+The default plan is gather, gather, close, rally — the same legible line the
+nemesis plays — so pressing GO without touching anything is a real turn rather
+than a trap. The talks are always yours; the planner queues the walking and the
+verbs, not the slides.
+
 ## The loop
 
 One round is: your turn → your talk → their turn (played out at 3x so you can
@@ -77,7 +91,11 @@ behaviour code.
 
 - `scripts/office.gd` — the world. Layout is rules, not placements, so moving a
   station is one constant.
-- `scripts/game.gd` — turn loop, the three verbs, the nemesis, scoring.
+- `scripts/planner.gd` — the queue-the-turn panel. Pure UI; it knows the names of
+  the three verbs and nothing else.
+- `scripts/game.gd` — turn loop, the three verbs, the nemesis, scoring. `_run_plan`
+  walks a queued route; `Player.auto_target` is what makes the character drive
+  itself.
 - `scripts/presentation.gd` — the talk, the hecklers, the scoreboards.
 - `scripts/person.gd` — one figure: archetype, curiosity, walking.
 - `materials/toon_base.tres` — restyles the whole scene at once.

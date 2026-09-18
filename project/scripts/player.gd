@@ -19,6 +19,15 @@ signal interact_pressed
 var rig: BlockFigure
 var input_locked: bool = false
 
+## When set, the character walks itself there and ignores the stick entirely.
+## Cleared on arrival, which is how [Game] knows a queued leg is done. Autopilot
+## deliberately overrides [member input_locked]: a planned route plays out while
+## the controls are locked, which is the whole point of watching it.
+var auto_target: Variant = null
+## Brisk but still readable — the walk is the thing being watched.
+@export var auto_speed: float = 4.4
+const AUTO_ARRIVE := 0.55
+
 ## Set by TouchControls on phones; added to the keyboard stick each frame.
 var touch_move := Vector2.ZERO
 ## Accumulated look delta in pixels from a touch drag, consumed each frame.
@@ -126,7 +135,17 @@ func _physics_process(delta: float) -> void:
 		velocity.y = 0.0
 
 	var dir := Vector3.ZERO
-	if not input_locked:
+	var auto := false
+	if auto_target != null:
+		var t: Vector3 = auto_target
+		var to := Vector3(t.x - global_position.x, 0.0, t.z - global_position.z)
+		if to.length() <= AUTO_ARRIVE:
+			auto_target = null
+		else:
+			dir = to.normalized()
+			auto = true
+
+	if not auto and not input_locked:
 		var stick := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 		stick += touch_move
 		if stick.length() > 1.0:
@@ -142,7 +161,7 @@ func _physics_process(delta: float) -> void:
 		else:
 			dir = Vector3.ZERO
 
-	var speed := run_speed if Input.is_action_pressed("run") else walk_speed
+	var speed := auto_speed if auto else (run_speed if Input.is_action_pressed("run") else walk_speed)
 	var target := dir * speed
 	velocity.x = move_toward(velocity.x, target.x, acceleration * delta)
 	velocity.z = move_toward(velocity.z, target.z, acceleration * delta)

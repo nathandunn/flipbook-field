@@ -5,6 +5,9 @@ set -euo pipefail
 GODOT="${1:-godot4}"
 cd "$(dirname "$0")"
 rm -rf web && mkdir -p web
+# New scripts with a class_name are only registered by an import pass;
+# without this a fresh clone cannot resolve them and the export fails.
+"$GODOT" --headless --path project --import
 "$GODOT" --headless --path project --export-release "Web" "$PWD/web/index.html"
 cd web
 # nginx serves these directly via gzip_static; regenerate them with every build

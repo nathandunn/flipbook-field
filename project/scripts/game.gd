@@ -42,6 +42,11 @@ var _used_names: Array[String] = []
 var _busy: bool = false
 var talk_cam: Camera3D
 
+var planner: Planner
+## True while a queued route is being walked. Cleared by "Take over", which is
+## how the autopilot loop knows to stop and hand the controls back.
+var _auto: bool = false
+
 
 func _ready() -> void:
 	rng.seed = world_seed if world_seed != 0 else int(Time.get_unix_time_from_system() * 1000.0)
@@ -70,8 +75,17 @@ func _ready() -> void:
 	talk_ui.finished.connect(_on_talk_finished)
 	talk_ui.round_closed.connect(_on_round_closed)
 
+	# Added in code rather than in the scene so the whole turn-planning feature is
+	# one file plus its wiring, and deleting it is one line.
+	planner = Planner.new()
+	planner.name = "Planner"
+	$UI.add_child(planner)
+	planner.plan_ready.connect(_on_plan_ready)
+	planner.manual.connect(_on_manual)
+	planner.took_over.connect(_on_took_over)
+
 	hud.set_hint(
-		"WASD move · Shift run · E act at a station · walk to the rock to present · Esc free mouse"
+		"Queue the turn and watch it, or Play it myself · WASD move · Shift run · E act · Esc free mouse"
 	)
 	_begin_player_turn()
 
@@ -154,6 +168,13 @@ func _begin_player_turn() -> void:
 	_refresh_hud()
 	hud.banner("ROUND %d — YOUR TURN" % round_no, 2.0)
 
+	# The turn opens on the planner. Walking it by hand is one tap away, so this
+	# costs a player who wants the controls nothing but that tap.
+	_auto = false
+	_busy = true
+	player.auto_target = null
+	planner.open(round_no, actions_left)
+
 
 func _refresh_hud() -> void:
 	hud.set_round(round_no, Arch.ROUNDS_PER_MATCH)
@@ -226,6 +247,98 @@ func _on_interact() -> void:
 			_act_break(Arch.Side.PLAYER)
 	_tick_influencers(Arch.Side.PLAYER)
 	_refresh_hud()
+
+
+# --- the queued turn ---------------------------------------------------------
+
+func _on_manual() -> void:
+	_auto = false
+	_busy = false
+	hud.toast("Yours. Click once to grab the camera.")
+
+
+## The player pressed Take over mid-route: stop at the next check, keep whatever
+## actions are unspent, hand the controls back.
+func _on_took_over() -> void:
+	_auto = false
+
+
+func _on_plan_ready(plan: Array) -> void:
+	_run_plan(plan)
+
+
+## Where a queued verb actually happens. Desks pick the nearest one, so a route
+## that gathers twice does not cross the field to do it.
+func _station_point(kind: int) -> Vector3:
+	match kind:
+		Office.St.STREAM:
+			return office.stream_point
+		Office.St.BREAK:
+			return office.break_point
+		Office.St.ROCK:
+			return office.rock_point
+	var best: Vector3 = office.desk_points[0]
+	var best_d := INF
+	for d in office.desk_points:
+		var dd: float = player.global_position.distance_to(d)
+		if dd < best_d:
+			best_d = dd
+			best = d
+	return best
+
+
+func _walk_player_to(pos: Vector3, max_time: float = 16.0) -> void:
+	player.auto_target = pos
+	var t := 0.0
+	while t < max_time and player.auto_target != null and _auto:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+	player.auto_target = null
+
+
+func _run_plan(plan: Array) -> void:
+	_auto = true
+	_busy = true
+
+	var total: int = plan.size()
+	for i in range(total):
+		if not _auto or actions_left <= 0:
+			break
+		var kind := int(plan[i])
+		planner.running(i + 1, total, "Heading for the %s." % Planner.verb_name(kind).to_lower())
+		await _walk_player_to(_station_point(kind))
+		if not _auto:
+			break
+
+		actions_left -= 1
+		match kind:
+			Office.St.DESK:
+				_act_desk(Arch.Side.PLAYER)
+			Office.St.STREAM:
+				_act_stream(Arch.Side.PLAYER)
+			Office.St.BREAK:
+				_act_break(Arch.Side.PLAYER)
+		_tick_influencers(Arch.Side.PLAYER)
+		_refresh_hud()
+		# A beat to read the toast before the next leg starts.
+		await get_tree().create_timer(0.9).timeout
+
+	if not _auto:
+		planner.close()
+		_busy = false
+		hud.toast("Yours, with %d action%s left." % [actions_left, "" if actions_left == 1 else "s"])
+		return
+
+	planner.running(total, total, "Taking the rock.")
+	await _walk_player_to(office.rock_point)
+	planner.close()
+	# Taking over on the last leg means you did not want to present yet.
+	if not _auto:
+		_busy = false
+		hud.toast("Yours. Walk to the rock when you are ready.")
+		return
+	_auto = false
+	_start_talk(Arch.Side.PLAYER)
 
 
 # --- the three verbs ---------------------------------------------------------
