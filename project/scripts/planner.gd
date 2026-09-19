@@ -195,8 +195,8 @@ func _clear() -> void:
 func _button(text: String) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.add_theme_font_size_override("font_size", 16)
-	b.custom_minimum_size = Vector2(560, 42)
+	b.add_theme_font_size_override("font_size", 15)
+	b.custom_minimum_size = Vector2(560, 34)
 	b.focus_mode = Control.FOCUS_NONE
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.add_theme_color_override("font_color", INK)
@@ -214,8 +214,10 @@ func _card(fill: Color) -> StyleBoxFlat:
 	sb.bg_color = fill
 	sb.border_color = INK
 	sb.set_border_width_all(3)
-	sb.set_content_margin_all(10)
-	sb.content_margin_left = 18
+	# Kept tight on purpose: six rows of cards have to fit a short browser window
+	# without the last two sliding off the bottom of the screen.
+	sb.set_content_margin_all(6)
+	sb.content_margin_left = 16
 	return sb
 
 
@@ -223,16 +225,30 @@ func _process(_delta: float) -> void:
 	if not visible:
 		return
 	var vp := get_viewport_rect().size
+
+	# Cover the screen explicitly rather than trusting the anchor preset. A
+	# Control added from code can end up 0x0, and a 0x0 panel with
+	# MOUSE_FILTER_STOP blocks nothing: a click that misses a row falls straight
+	# through to the player, which captures the pointer and kills the panel.
+	position = Vector2.ZERO
+	size = vp
+
 	# A bottom bar rather than a centred dialog: the office has to stay visible
 	# while you plan a route through it.
 	var w: float = minf(920.0, vp.x - 40.0)
-	var tall: float = 150.0 if _mode == "run" else 120.0 + float(_slots.size() + 2) * 52.0
-	var h: float = minf(tall, vp.y * 0.70)
+	var pad := 22.0
+
+	# Measured, not guessed. Button height comes from the theme font and the card
+	# margins, so a hardcoded row height leaves the last rows hanging off the
+	# bottom of the screen where they cannot be clicked at all.
+	var head := _title.get_minimum_size().y + 4.0 + _sub.get_minimum_size().y + 10.0
+	var rows := _box.get_combined_minimum_size().y
+	var foot := 0.0 if _mode == "run" else 30.0
+	var h: float = minf(pad * 2.0 + head + rows + foot, vp.y - 44.0)
 	_panel_rect = Rect2(
 		Vector2(roundf(vp.x * 0.5 - w * 0.5), roundf(vp.y - h - 22.0)), Vector2(w, h)
 	)
 
-	var pad := 22.0
 	var x := _panel_rect.position.x + pad
 	var y := _panel_rect.position.y + pad
 

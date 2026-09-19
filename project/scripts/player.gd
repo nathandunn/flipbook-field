@@ -103,7 +103,10 @@ func _capture_mouse(on: bool) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not touch_mode and event is InputEventMouseButton:
+	# Never grab the pointer while a panel owns the screen. A click that misses a
+	# button would otherwise lock the cursor and leave the panel unclickable,
+	# with no way back that the player would ever guess. Esc and T stay live.
+	if not input_locked and not touch_mode and event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			_capture_mouse(true)
