@@ -25,8 +25,10 @@ look, and the **TALK** button acts.
 
 ## Two ways to take a turn
 
-Every turn opens on the **planner**: four slots, each tapped to cycle through
-*desk · stream · break room · skip*. Press **GO** and the character walks the
+Every turn opens on the **planner**: four steps, and for each step the four things
+it could be — *Desk · Stream · Break room · Skip* — with the chosen one filled
+in. One press sets a step, and Skip is a choice like any other, so a turn can
+spend three actions instead of four. Press **GO** and the character walks the
 route itself while you watch — a bar at the bottom says which leg it is on, and
 **Take over** stops it where it stands and gives you back whatever actions are
 unspent. **Play it myself** closes the planner and you walk it by hand, exactly

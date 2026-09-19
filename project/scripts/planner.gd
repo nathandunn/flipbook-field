@@ -75,17 +75,6 @@ static func verb_name(v: int) -> String:
 	return "Skip"
 
 
-static func verb_blurb(v: int) -> String:
-	match v:
-		Office.St.DESK:
-			return "take a prop; the three nearest neutrals get curious"
-		Office.St.STREAM:
-			return "close curious neutrals standing nearby into followers"
-		Office.St.BREAK:
-			return "rally: a wage slave drifts in, your people hold their nerve"
-	return "spend nothing and keep the walk short"
-
-
 # --- planning ----------------------------------------------------------------
 
 ## Gather, gather, close, rally — the same legible line the nemesis plays, so
@@ -106,19 +95,45 @@ func open(round_no: int, budget: int) -> void:
 	# The pointer is captured for camera look during play; the planner needs it back.
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_title.text = "Round %d — plan your turn" % round_no
-	_sub.text = "Tap a line to change it, then watch it play out."
+	_sub.text = "Desk gathers a prop and warms the nearest  ·  Stream closes the curious  ·  Break room rallies"
 	_rebuild()
 
 
 func _rebuild() -> void:
 	_clear()
 	for i in range(_slots.size()):
-		var v: int = int(_slots[i])
-		var b := _button("%d.    %s  —  %s" % [i + 1, verb_name(v), verb_blurb(v)])
-		b.pressed.connect(_cycle.bind(i))
+		_box.add_child(_step_row(i))
 	_button("GO  —  walk the route, then present").pressed.connect(_go)
 	_button("Play it myself").pressed.connect(_by_hand)
 	_hint.text = _route_line()
+
+
+## One step: its number, then the four things that step could be, the chosen one
+## filled in. Four visible choices rather than tap-to-cycle, so "skip this
+## action" is a thing you can see and press, not a fourth tap to discover.
+func _step_row(i: int) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+
+	var n := Label.new()
+	n.text = "%d" % (i + 1)
+	n.add_theme_font_size_override("font_size", 16)
+	n.add_theme_color_override("font_color", Color(0.13, 0.11, 0.18, 0.55))
+	n.custom_minimum_size = Vector2(20, 0)
+	n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(n)
+
+	for v in CYCLE:
+		var chip := _chip(verb_name(int(v)), int(_slots[i]) == int(v))
+		chip.pressed.connect(_pick.bind(i, int(v)))
+		row.add_child(chip)
+	return row
+
+
+func _pick(i: int, v: int) -> void:
+	_slots[i] = v
+	_rebuild()
 
 
 func _route_line() -> String:
@@ -136,10 +151,6 @@ func _route_line() -> String:
 	]
 
 
-func _cycle(i: int) -> void:
-	var at: int = CYCLE.find(int(_slots[i]))
-	_slots[i] = CYCLE[(at + 1) % CYCLE.size()]
-	_rebuild()
 
 
 func _go() -> void:
@@ -209,7 +220,28 @@ func _button(text: String) -> Button:
 	return b
 
 
-func _card(fill: Color) -> StyleBoxFlat:
+## One choice within a step. Filled dark when it is the one currently chosen, so
+## the plan can be read at a glance without reading any words.
+func _chip(text: String, chosen: bool) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.add_theme_font_size_override("font_size", 15)
+	b.custom_minimum_size = Vector2(0, 30)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.focus_mode = Control.FOCUS_NONE
+	b.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var fill := Color(0.13, 0.11, 0.18, 0.9) if chosen else Color(1, 1, 1, 0.55)
+	var face := PAPER if chosen else INK
+	b.add_theme_color_override("font_color", face)
+	b.add_theme_color_override("font_hover_color", face)
+	b.add_theme_color_override("font_pressed_color", PAPER)
+	b.add_theme_stylebox_override("normal", _card(fill, 8))
+	b.add_theme_stylebox_override("hover", _card(fill if chosen else Color(1, 1, 1, 0.95), 8))
+	b.add_theme_stylebox_override("pressed", _card(Color(0.13, 0.11, 0.18, 0.9), 8))
+	return b
+
+
+func _card(fill: Color, left: int = 16) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = fill
 	sb.border_color = INK
@@ -217,7 +249,7 @@ func _card(fill: Color) -> StyleBoxFlat:
 	# Kept tight on purpose: six rows of cards have to fit a short browser window
 	# without the last two sliding off the bottom of the screen.
 	sb.set_content_margin_all(6)
-	sb.content_margin_left = 16
+	sb.content_margin_left = left
 	return sb
 
 
