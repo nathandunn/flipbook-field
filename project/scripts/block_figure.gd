@@ -23,12 +23,17 @@ const ARM_W := 0.15
 const LEG_LEN := 0.74
 const LEG_W := 0.18
 const HEAD := Vector3(0.38, 0.40, 0.36)
+## The face card is wider and taller than a skull because the drawings include
+## the hair, and in these drawings the hair is most of the person.
+const CARD := 0.62
 
 var skin: Color
 var shirt: Color
 var pants: Color
 var hair: Color
 var figure_height: float = 1.0
+## Which drawing this figure wears. See Ink.face_mat.
+var face: int = 0
 
 var head_pivot: Node3D
 var torso: Node3D
@@ -43,7 +48,7 @@ var _seed_offset: float = 0.0
 
 static func create(
 	p_skin: Color, p_shirt: Color, p_pants: Color, p_hair: Color,
-	p_height: float = 1.0, p_seed: float = 0.0
+	p_height: float = 1.0, p_seed: float = 0.0, p_face: int = 0
 ) -> BlockFigure:
 	var f := BlockFigure.new()
 	f.skin = p_skin
@@ -52,6 +57,7 @@ static func create(
 	f.hair = p_hair
 	f.figure_height = p_height
 	f._seed_offset = p_seed
+	f.face = p_face
 	f._build()
 	return f
 
@@ -63,7 +69,6 @@ func _build() -> void:
 	var shirt_mat := Ink.mat(shirt)
 	var pants_mat := Ink.mat(pants)
 	var hair_mat := Ink.mat(hair)
-	var eye_mat := Ink.mat(Ink.INK, 0.0)
 
 	# Torso
 	torso = Node3D.new()
@@ -77,19 +82,29 @@ func _build() -> void:
 	head_pivot.name = "Head"
 	head_pivot.position = Vector3(0, TORSO_H + 0.06, 0)
 	torso.add_child(head_pivot)
-	_box(head_pivot, HEAD, Vector3(0, HEAD.y * 0.5, 0), skin_mat, "HeadBox")
+	# The head is a drawing on paper, not a box of skin. A card carries one of
+	# the scanned faces; a slim slab sits behind it so the head has mass from the
+	# side and something opaque to hide the card's back.
+	#
+	# The card is on -Z because -Z is forward in Godot, which also makes it the
+	# "which way is this figure facing" readout while you're moving nodes around.
+	var back := _box(head_pivot,
+		Vector3(HEAD.x * 0.78, HEAD.y * 0.88, HEAD.z * 0.60),
+		Vector3(0, HEAD.y * 0.50, 0.02), hair_mat, "HeadBack")
+	back.name = "HeadBack"
 
-	# Hair: a cap slab plus a fringe, enough to tell figures apart at a glance.
-	_box(head_pivot, Vector3(HEAD.x + 0.02, 0.10, HEAD.z + 0.02),
-		Vector3(0, HEAD.y - 0.02, 0), hair_mat, "HairCap")
-	_box(head_pivot, Vector3(HEAD.x + 0.02, 0.09, 0.06),
-		Vector3(0, HEAD.y - 0.11, HEAD.z * 0.5), hair_mat, "HairFringe")
-
-	# Eyes on -Z: -Z is forward in Godot, so this is also the "which way am I
-	# facing" readout while you're moving nodes around.
-	var eye := Vector3(0.06, 0.06, 0.03)
-	_box(head_pivot, eye, Vector3(-0.09, HEAD.y * 0.58, -HEAD.z * 0.5), eye_mat, "EyeL")
-	_box(head_pivot, eye, Vector3(0.09, HEAD.y * 0.58, -HEAD.z * 0.5), eye_mat, "EyeR")
+	var card := MeshInstance3D.new()
+	card.name = "FaceCard"
+	var quad := QuadMesh.new()
+	quad.size = Vector2(CARD, CARD)
+	card.mesh = quad
+	card.position = Vector3(0, HEAD.y * 0.46, -HEAD.z * 0.5 - 0.014)
+	card.rotation.y = PI
+	card.material_override = Ink.face_mat(face)
+	# The inverted-hull outline belongs on solid shapes; on a flat card it would
+	# draw a black rectangle behind the drawing.
+	card.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	head_pivot.add_child(card)
 
 	# Arms
 	arm_l = _limb(torso, Vector3(-(TORSO_W * 0.5 + ARM_W * 0.5), TORSO_H - 0.06, 0),

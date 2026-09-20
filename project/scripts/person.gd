@@ -24,6 +24,9 @@ var curiosity: float = 0.0
 var resolve: bool = false
 
 var rig: BlockFigure
+## Which drawing this person wears. Left at -1 it is drawn from their seed;
+## [Game] sets it explicitly so no two people in a match share a face.
+var face_index: int = -1
 var home_pos := Vector3.ZERO
 
 var _target: Vector3 = Vector3.INF
@@ -66,7 +69,8 @@ func _ready() -> void:
 			Ink.PANTS[rng.randi() % Ink.PANTS.size()],
 			Ink.HAIRS[rng.randi() % Ink.HAIRS.size()],
 			rng.randf_range(0.88, 1.12),
-			_idle_seed
+			_idle_seed,
+			face_index if face_index >= 0 else int(rng.randi() % Ink.FACE_COUNT)
 		)
 		rig.name = "Rig"
 		add_child(rig)

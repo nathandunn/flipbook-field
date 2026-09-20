@@ -39,6 +39,11 @@ var round_stats := {}
 @onready var touch: TouchControls = $UI/Touch
 
 var _used_names: Array[String] = []
+## Faces 0 and 1 are spoken for - the two drawings cast as the player and the
+## nemesis. The rest are dealt from a shuffled deck so no two people in a match
+## wear the same face.
+const NEMESIS_FACE := 1
+var _face_deck: Array[int] = []
 var _busy: bool = false
 var talk_cam: Camera3D
 
@@ -101,8 +106,23 @@ func _pick_name() -> String:
 	return "Colleague %d" % _used_names.size()
 
 
+## Next unused face. The deck refills if the crowd ever outgrows it, which means
+## faces repeat rather than anyone turning up blank.
+func _deal_face() -> int:
+	if _face_deck.is_empty():
+		for i in range(2, Ink.FACE_COUNT):
+			_face_deck.append(i)
+		for i in range(_face_deck.size() - 1, 0, -1):
+			var j := int(rng.randi() % (i + 1))
+			var swap := _face_deck[i]
+			_face_deck[i] = _face_deck[j]
+			_face_deck[j] = swap
+	return _face_deck.pop_back()
+
+
 func _add_person(kind: int, side: int, at: Vector3) -> Person:
 	var p := Person.create(_pick_name(), kind, side, rng.randf_range(0.0, 10.0))
+	p.face_index = _deal_face()
 	p.taste = rng.randi() % 4
 	add_child(p)
 	p.global_position = at + Vector3(0, 0.1, 0)
@@ -134,6 +154,7 @@ func _spawn_people() -> void:
 		_add_person(Arch.Kind.NEUTRAL, Arch.Side.NONE, Vector3(cos(a) * d, 0, sin(a) * d * 0.8))
 
 	nemesis = Person.create("Your Nemesis", Arch.Kind.FOLLOWER, Arch.Side.NEMESIS, 3.3)
+	nemesis.face_index = NEMESIS_FACE
 	add_child(nemesis)
 	nemesis.global_position = Office.BREAK_POS + Vector3(0, 0.1, 2.0)
 	nemesis.home_pos = Office.BREAK_POS

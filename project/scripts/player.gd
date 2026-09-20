@@ -16,6 +16,10 @@ signal interact_pressed
 ## than rendering as a magenta shader error.
 @export var ink_post_enabled: bool = true
 
+## Face 0 is the drawing cast as the player; face 1 is the nemesis. The rest
+## of the deck is dealt out to the crowd by [Game].
+const PLAYER_FACE := 0
+
 var rig: BlockFigure
 var input_locked: bool = false
 
@@ -47,7 +51,8 @@ func _ready() -> void:
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)) * 1.8
 
 	rig = BlockFigure.create(
-		Ink.SKINS[2], Color("c4614f"), Ink.PANTS[0], Ink.HAIRS[1], 1.0, 0.0
+		Ink.SKINS[2], Color("c4614f"), Ink.PANTS[0], Ink.HAIRS[1], 1.0, 0.0,
+		PLAYER_FACE
 	)
 	rig.name = "Rig"
 	add_child(rig)
