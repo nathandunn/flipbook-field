@@ -20,6 +20,10 @@ var taste: int = Arch.Taste.DATA
 
 ## 0..3. Cold neutrals shrug at the stream; curious ones can be closed there.
 var curiosity: float = 0.0
+## Whose things they have been looking at. A neutral is curious about one side
+## at a time: the other side can restart their interest, but cannot walk up to
+## the stream and close somebody you warmed.
+var curious_for: int = Arch.Side.NONE
 ## Set by a break-room rally: resists one flip this round.
 var resolve: bool = false
 
@@ -113,18 +117,42 @@ func set_kind_side(p_kind: int, p_side: int) -> void:
 	kind = p_kind
 	side = p_side
 	curiosity = 0.0
+	curious_for = Arch.Side.NONE
 	refresh()
 
 
-func warm(amount: float) -> void:
+## Warm this neutral toward [param by]. Warmth for the other side is replaced,
+## not added to: a desk visit near somebody the other side has been courting
+## takes them off the other side's list and starts them on yours.
+func warm(amount: float, by: int = Arch.Side.NONE) -> void:
 	if kind != Arch.Kind.NEUTRAL:
 		return
-	curiosity = clampf(curiosity + amount, 0.0, Arch.CURIOSITY_MAX)
+	var r := Person.warm_rule(curiosity, curious_for, amount, by)
+	curiosity = r[0]
+	curious_for = r[1]
 	refresh()
+
+
+## The arithmetic of warming, as a pure function so a card can show exactly
+## what a visit would do. Interest is a tug of war: the other side's warmth is
+## worn down first, and only once it is gone does the neutral start on you.
+## Returns [curiosity, curious_for].
+static func warm_rule(cur: float, who: int, amount: float, by: int) -> Array:
+	if by == Arch.Side.NONE or who == Arch.Side.NONE or by == who:
+		return [clampf(cur + amount, 0.0, Arch.CURIOSITY_MAX), by if by != Arch.Side.NONE else who]
+	var left := cur - amount
+	if left > 0.0:
+		return [left, who]
+	return [clampf(-left, 0.0, Arch.CURIOSITY_MAX), by]
 
 
 func is_curious() -> bool:
 	return kind == Arch.Kind.NEUTRAL and curiosity >= Arch.CURIOUS_AT
+
+
+## Curious, and about [param side] in particular.
+func is_curious_for(p_side: int) -> bool:
+	return is_curious() and curious_for == p_side
 
 
 func goto(p: Vector3, hurry: bool = false) -> void:

@@ -21,6 +21,9 @@ var _audience: Array = []      ## Array[Person]
 var _spectators: Array = []    ## Array[Person] - curious neutrals, the prize
 
 var _slide_idx: int = 0
+## Round arc: how many times a heckler is allowed to interrupt this talk.
+var _round: int = 1
+var _heckles: int = 0
 var _claps: float = 0.0
 var _boos: float = 0.0
 var _played: Array = []
@@ -61,11 +64,13 @@ func _label(size: int, col: Color) -> Label:
 
 ## [param audience] are the people who will clap or boo; [param spectators] are
 ## curious neutrals who convert on the claps-to-boos ratio.
-func begin(side: int, props: Array, audience: Array, spectators: Array) -> void:
+func begin(side: int, props: Array, audience: Array, spectators: Array, round_no: int = 1) -> void:
 	_side = side
 	_props = props.duplicate()
 	_audience = audience
 	_spectators = spectators
+	_round = round_no
+	_heckles = 0
 	_slide_idx = 0
 	_claps = 0.0
 	_boos = 0.0
@@ -118,7 +123,9 @@ func _on_slide_picked(i: int) -> void:
 
 	# Heckle between slides, never after the last one - the talk should end on
 	# your material, not on somebody shouting.
-	if _slide_idx < Arch.SLIDES_PER_TALK and _hecklers() > 0:
+	if _slide_idx < Arch.SLIDES_PER_TALK and _hecklers() > 0 \
+			and _heckles < Arch.heckles_per_talk(_round):
+		_heckles += 1
 		_ask_heckle()
 	else:
 		_ask_slide()
@@ -151,15 +158,25 @@ func _on_heckle(clap_back: bool) -> void:
 	for p in _audience:
 		if p.kind == Arch.Kind.LOVER:
 			lovers += 1
-	var chance: float = clampf(0.45 + lovers * 0.12, 0.0, 0.9)
+	# Better than even, so clapping back is a real choice and not a trap: the
+	# safe line costs 3 boos for certain, the bold one is +9 or -5 with your
+	# people at stake only when a bully is in the room.
+	var chance: float = clampf(0.6 + lovers * 0.1, 0.0, 0.9)
 
 	if randf() < chance:
 		_claps += 9.0
 		_log.text = "It lands. The room roars. +9 claps."
 	else:
-		_boos += 6.0
-		_log.text = "It does not land. +6 boos, and somebody quietly leaves."
-		_lost_follower = _pick_flippable()
+		_boos += 5.0
+		var bully := false
+		for p in _audience:
+			if p.kind == Arch.Kind.BULLY:
+				bully = true
+		if bully:
+			_lost_follower = _pick_flippable()
+			_log.text = "It does not land. +5 boos, and their bully walks somebody out."
+		else:
+			_log.text = "It does not land. +5 boos."
 	_ask_slide()
 
 
@@ -168,13 +185,23 @@ func _on_heckle(clap_back: bool) -> void:
 func _auto_run() -> void:
 	_title.text = "Their turn at the rock"
 	_clear_buttons()
-	_props.shuffle()
+	# Best-wanted slide first, same as a player reading the crowd line would.
 	for i in range(mini(Arch.SLIDES_PER_TALK, _props.size())):
-		var p: Dictionary = _props[i]
+		var best := 0
+		for j in range(_props.size()):
+			if _wanting(_props[j]["taste"]) > _wanting(_props[best]["taste"]):
+				best = j
+		var p: Dictionary = _props[best]
+		_props.remove_at(best)
 		_played.append(p)
 		var res := _score_slide(p["taste"])
 		_claps += res[0]
 		_boos += res[1]
+		# They get heckled on the same schedule you do, and always let it go.
+		if i < Arch.SLIDES_PER_TALK - 1 and _hecklers() > 0 \
+				and _heckles < Arch.heckles_per_talk(_round):
+			_heckles += 1
+			_boos += 3.0
 	_sub.text = _crowd_line()
 	_refresh_tally()
 	_log.text = "They got through it."
@@ -392,6 +419,9 @@ func _close_round(again: bool) -> void:
 
 func _clear_buttons() -> void:
 	for c in _box.get_children():
+		# Removed now, not just queued: the next row set is built in the same
+		# frame and a deferred free would leave the old rows still taking space.
+		_box.remove_child(c)
 		c.queue_free()
 
 
@@ -400,8 +430,8 @@ func _clear_buttons() -> void:
 func _button(text: String) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.add_theme_font_size_override("font_size", 17)
-	b.custom_minimum_size = Vector2(560, 46)
+	b.add_theme_font_size_override("font_size", 15)
+	b.custom_minimum_size = Vector2(560, 34)
 	b.focus_mode = Control.FOCUS_NONE
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.add_theme_color_override("font_color", INK)
@@ -420,8 +450,10 @@ func _card(fill: Color) -> StyleBoxFlat:
 	sb.bg_color = fill
 	sb.border_color = INK
 	sb.set_border_width_all(3)
-	sb.set_content_margin_all(12)
-	sb.content_margin_left = 18
+	# Kept tight, like the planner's cards: four slides plus the crowd line
+	# have to fit a short browser window.
+	sb.set_content_margin_all(5)
+	sb.content_margin_left = 16
 	return sb
 
 
@@ -432,12 +464,17 @@ func _process(_delta: float) -> void:
 	# A bottom bar, not a centred box: the crowd line and the slide choices are
 	# about who turned up, so the stage has to stay visible while you read them.
 	var w: float = minf(920.0, vp.x - 40.0)
-	var h: float = minf(330.0, vp.y * 0.52)
+	var pad := 22.0
+	# Measured, not guessed: a fixed 330 once left the second heckle button
+	# below the bottom of the window.
+	var head: float = _title.get_minimum_size().y + 6.0 + _sub.get_minimum_size().y + 10.0 \
+		+ _tally.get_minimum_size().y + 12.0
+	var rows: float = _box.get_combined_minimum_size().y
+	var h: float = minf(pad * 2.0 + head + rows + 12.0 + 40.0, vp.y - 44.0)
 	_panel_rect = Rect2(
 		Vector2(roundf(vp.x * 0.5 - w * 0.5), roundf(vp.y - h - 22.0)), Vector2(w, h)
 	)
 
-	var pad := 22.0
 	var x := _panel_rect.position.x + pad
 	var y := _panel_rect.position.y + pad
 

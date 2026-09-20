@@ -17,6 +17,10 @@ const DESK_CLUSTER := Vector3(-8.5, 0, 0.0)
 ## Each entry: { kind, pos, label, radius }
 var stations: Array[Dictionary] = []
 var desk_points: Array[Vector3] = []
+## Parallel to desk_points: which taste each desk gathers, or -1 for a mixed
+## desk that hands out whatever is on it. Typed desks are what make gathering
+## a choice - you go to the Story desk because the room wants stories.
+var desk_tastes: Array[int] = []
 var stream_point := Vector3(0, 0, STREAM_Z - 2.2)
 var break_point := BREAK_POS
 var rock_point := ROCK_POS + Vector3(0, 0, 1.6)
@@ -31,6 +35,7 @@ func build(p_rng: RandomNumberGenerator) -> void:
 		c.queue_free()
 	stations.clear()
 	desk_points.clear()
+	desk_tastes.clear()
 
 	_ground()
 	_stream()
@@ -154,13 +159,21 @@ func _stream() -> void:
 func _desks() -> void:
 	var cols := 3
 	var rows := 2
+	var i := 0
 	for r in range(rows):
 		for c in range(cols):
 			var p := DESK_CLUSTER + Vector3((c - 1) * 4.6, 0, (r - 0.5) * 4.4)
 			p += Vector3(rng.randf_range(-0.5, 0.5), 0, rng.randf_range(-0.5, 0.5))
 			_desk(p, rng.randf_range(-0.3, 0.3))
+			# The first four desks are one per taste; the rest are mixed.
+			var taste: int = i if i < 4 else -1
+			var label: String = ("%s desk" % Arch.TASTE_NAME[taste]) if taste >= 0 else "Desk — a bit of everything"
 			desk_points.append(p + Vector3(0, 0, 1.9))
-			_station(St.DESK, p + Vector3(0, 0, 1.9), "Desk — gather a prop", 2.4)
+			desk_tastes.append(taste)
+			_station(St.DESK, p + Vector3(0, 0, 1.9), label, 2.4)
+			stations[stations.size() - 1]["taste"] = taste
+			stations[stations.size() - 1]["desk"] = i
+			i += 1
 
 
 func _desk(at: Vector3, yaw: float) -> void:
@@ -431,6 +444,14 @@ func _cyl(parent: Node3D, top: float, bottom: float, h: float, at: Vector3,
 
 
 ## Nearest station to a world point, or an empty dictionary if none is in range.
+## The desk that gathers [param taste], or a mixed desk for -1.
+func desk_point(taste: int) -> Vector3:
+	for i in range(desk_points.size()):
+		if desk_tastes[i] == taste:
+			return desk_points[i]
+	return desk_points[0]
+
+
 func station_at(p: Vector3) -> Dictionary:
 	var best := {}
 	var best_d := INF

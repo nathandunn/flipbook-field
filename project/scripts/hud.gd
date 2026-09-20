@@ -11,6 +11,8 @@ const INK := Color("12101a")
 var _round_label: Label
 var _score_label: Label
 var _props_label: Label
+## What the room wants, and the other side's hand size. The board, in numbers.
+var _demand_label: Label
 var _prompt: Label
 var _toast: Label
 var _banner: Label
@@ -30,6 +32,7 @@ func _ready() -> void:
 	_round_label = _mk(20, INK)
 	_score_label = _mk(17, INK)
 	_props_label = _mk(15, INK)
+	_demand_label = _mk(15, Color(0.13, 0.11, 0.18, 0.85))
 	_prompt = _mk(18, PAPER)
 	_toast = _mk(20, PAPER)
 	_banner = _mk(30, PAPER)
@@ -62,12 +65,26 @@ func set_score(you_people: int, them_people: int, you_pts: int, them_pts: int) -
 
 func set_props(props: Array) -> void:
 	if props.is_empty():
-		_props_label.text = "satchel: empty"
+		_props_label.text = "hand: empty"
 		return
-	var names: Array[String] = []
+	# Tastes only: the names are on the cards, and four names do not fit here.
+	var counts := {}
 	for p in props:
-		names.append("%s (%s)" % [p["name"], Arch.TASTE_NAME[p["taste"]]])
-	_props_label.text = "satchel: " + ", ".join(names)
+		counts[p["taste"]] = int(counts.get(p["taste"], 0)) + 1
+	var parts: Array[String] = []
+	for t in range(4):
+		if counts.has(t):
+			parts.append("%s ×%d" % [Arch.TASTE_NAME[t], counts[t]] if counts[t] > 1 else Arch.TASTE_NAME[t])
+	_props_label.text = "hand: " + ", ".join(parts)
+
+
+## [param demand] maps taste -> how many people likely at your talk want it.
+## Shown always, because a card game where you cannot see the table is a guess.
+func set_demand(demand: Dictionary, their_hand: int) -> void:
+	var parts: Array[String] = []
+	for t in range(4):
+		parts.append("%s %d" % [Arch.TASTE_NAME[t], int(demand.get(t, 0))])
+	_demand_label.text = "room wants:  " + "  ·  ".join(parts) + "        their hand: %d" % their_hand
 
 
 func set_actions(left: int, total: int) -> void:
@@ -115,6 +132,9 @@ func _process(delta: float) -> void:
 	_props_label.size = _props_label.get_minimum_size()
 	_props_label.position = Vector2(20, 70)
 
+	_demand_label.size = _demand_label.get_minimum_size()
+	_demand_label.position = Vector2(20, 92)
+
 	_hint.size = _hint.get_minimum_size()
 	_hint.position = Vector2(20, vp.y - 26)
 
@@ -143,7 +163,8 @@ func _draw() -> void:
 	var vp := get_viewport_rect().size
 
 	# Panel behind the status block.
-	var top := Rect2(Vector2(12, 8), Vector2(maxf(_score_label.size.x, _props_label.size.x) + 32, 86))
+	var top := Rect2(Vector2(12, 8), Vector2(
+		maxf(maxf(_score_label.size.x, _props_label.size.x), _demand_label.size.x) + 32, 110))
 	draw_rect(top, Color(0.98, 0.96, 0.90, 0.82), true)
 	draw_rect(top, INK, false, 3.0)
 

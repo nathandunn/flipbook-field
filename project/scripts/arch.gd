@@ -76,9 +76,43 @@ const STREAM_CLOSE_MAX := 2
 ## Crowd size needed to pull in one extra curious neutral as a spectator.
 const SPECTATOR_PER_HEADS := 3
 
-const ACTIONS_PER_TURN := 4
 const ROUNDS_PER_MATCH := 3
 const SLIDES_PER_TALK := 3
+
+# --- The match as a board game -----------------------------------------------
+# What made the first version dull was that nothing you did could ever block,
+# bait or answer the other side: they moved after you, in a lump. Now moves
+# alternate - you, them, you, them - and the board is public. Every card you
+# hold can be played as a slide or spent to buy somebody; every station you
+# stand on is one they cannot use next move.
+
+## Moves each side gets per round before the talks.
+const MOVES_PER_ROUND := 4
+## Kept for the HUD's action pips.
+const ACTIONS_PER_TURN := MOVES_PER_ROUND
+
+## Spend a card to buy a follower of the other side who wants it, if they are
+## within this reach of the station you act at. Lovers are immune; anyone who
+## rallied in the break room this round (resolve) is immune too - which is what
+## makes the break room a defensive move and not just a free wage slave.
+const POACH_RADIUS := 9.0
+## Haters needed before one of them goes to bully the other side's talk.
+const BULLY_FROM_HATERS := 2
+
+## Whoever has fewer people gets this many extra spectator slots at their talk.
+## A chess game with no way back is a game you stop playing at move ten.
+const UNDERDOG_SLOTS := 1
+
+
+## Round arc. Hecklers interrupt more as the match goes on.
+static func heckles_per_talk(round_no: int) -> int:
+	return clampi(round_no, 1, SLIDES_PER_TALK - 1)
+
+
+## In the last round the whole office turns up: a smaller crowd pulls in the
+## same number of spectators, so the final talks are the big ones.
+static func spectator_per_heads(round_no: int) -> int:
+	return SPECTATOR_PER_HEADS if round_no < ROUNDS_PER_MATCH else 2
 
 
 static func side_color(side: int) -> Color:
