@@ -26,6 +26,10 @@
 ##   - Somebody booed out of a talk goes back to the grass, warm, rather than
 ##     joining the other side - which is what stops one bad talk from being
 ##     the whole match.
+##   - Sabotage, both ways. Pinch a card from their hand at the desk of that
+##     taste, spread a rumour at the stream to cool the people they warmed,
+##     rig the projector at the rock so their best slide comes up blank. Every
+##     trick is a move they can see on the HUD and answer.
 extends Node3D
 
 enum Phase { PLAYER_TURN, TALK, NEMESIS_TURN, ROUND_END, MATCH_OVER }
@@ -73,6 +77,11 @@ var lead_changes: int = 0
 var _last_leader: int = Arch.Side.NONE
 ## Who opened the last round, so level rounds alternate.
 var _last_first: int = Arch.Side.NEMESIS
+## Sabotage state. rigged[side] is true when the projector has been rigged
+## against that side; cleared when they check it, or when it fires.
+var rigged := {Arch.Side.PLAYER: false, Arch.Side.NEMESIS: false}
+## What was done to whom this round, for the HUD and the round card.
+var sabotage_log := {Arch.Side.PLAYER: [], Arch.Side.NEMESIS: []}
 
 @onready var sun: DirectionalLight3D = $Sun
 @onready var hud: Hud = $UI/Hud
@@ -224,16 +233,18 @@ func _begin_round() -> void:
 		p.resolve = false
 	occupied = {Arch.Side.PLAYER: "", Arch.Side.NEMESIS: ""}
 	_presented = {Arch.Side.PLAYER: false, Arch.Side.NEMESIS: false}
+	sabotage_log = {Arch.Side.PLAYER: [], Arch.Side.NEMESIS: []}
 	actions_left = Arch.MOVES_PER_ROUND
 	_refresh_hud()
 	hud.banner("ROUND %d" % round_no, 2.0)
 
-	# Who moves first matters: the second mover gets first pick of whoever the
-	# first mover just made curious. So the side that is behind moves first,
-	# and on level terms it alternates - the white-and-black of this game.
+	# Who moves last matters more than who moves first: the second mover gets
+	# first pick of whoever the first just made curious, and the last move of a
+	# round is the one nothing can answer. So the side that is behind moves
+	# second, and on level terms it alternates - the white-and-black of this game.
 	var first := _first_mover()
 	if round_no > 1:
-		hud.toast("Behind, so you move first." if first == Arch.Side.PLAYER else "Ahead, so they move first.")
+		hud.toast("Ahead, so you move first." if first == Arch.Side.PLAYER else "Behind, so you get the last word.")
 	for m in range(Arch.MOVES_PER_ROUND):
 		move_no = m + 1
 		actions_left = Arch.MOVES_PER_ROUND - m
@@ -258,9 +269,9 @@ func _first_mover() -> int:
 	var a := _count(Arch.Side.PLAYER)
 	var b := _count(Arch.Side.NEMESIS)
 	var first: int
-	if a < b:
+	if a > b:
 		first = Arch.Side.PLAYER
-	elif b < a:
+	elif b > a:
 		first = Arch.Side.NEMESIS
 	else:
 		first = Arch.Side.NEMESIS if _last_first == Arch.Side.PLAYER else Arch.Side.PLAYER
@@ -275,8 +286,20 @@ func _refresh_hud() -> void:
 		points[Arch.Side.PLAYER], points[Arch.Side.NEMESIS]
 	)
 	hud.set_props(satchel[Arch.Side.PLAYER])
-	hud.set_demand(_demand(Arch.Side.PLAYER), satchel[Arch.Side.NEMESIS].size())
+	hud.set_demand(_demand(Arch.Side.PLAYER), satchel[Arch.Side.NEMESIS].size(), _flags_line())
 	hud.set_actions(actions_left, Arch.MOVES_PER_ROUND)
+
+
+## The sabotage tell. Nothing done to you is ever hidden.
+func _flags_line() -> String:
+	var parts: Array[String] = []
+	if rigged[Arch.Side.PLAYER]:
+		parts.append("PROJECTOR RIGGED against you")
+	if rigged[Arch.Side.NEMESIS]:
+		parts.append("you rigged their projector")
+	for line in sabotage_log[Arch.Side.PLAYER]:
+		parts.append(str(line))
+	return "  ·  ".join(parts)
 
 
 ## The score: people who would clap for this side. Wage slaves and haters are
@@ -404,6 +427,69 @@ func _options_for(side: int) -> Array:
 			"value": (1.8 if _count(side) >= _count(other) + 1 else 0.6) + (0.8 if haters == Arch.BULLY_FROM_HATERS - 1 else 0.0),
 		})
 
+	# --- sabotage -----------------------------------------------------------
+	# Pinch a card: stand at the desk of a taste they hold and take one.
+	var their_hand: Array = satchel[other]
+	var pinch_tastes := {}
+	for c in their_hand:
+		if int(c["taste"]) >= 0:
+			pinch_tastes[int(c["taste"])] = true
+	var pinch_rows := 0
+	for taste in pinch_tastes.keys():
+		if pinch_rows >= 2:
+			break
+		var di := -1
+		for i in range(office.desk_tastes.size()):
+			if office.desk_tastes[i] == taste:
+				di = i
+		if di < 0:
+			continue
+		var id := "desk:%d" % di
+		opts.append({
+			"id": "pinch:%d" % taste, "kind": "pinch", "taste": taste, "station": id, "pos": office.desk_points[di],
+			"label": "Pinch their %s card" % Arch.TASTE_NAME[taste],
+			"sub": "take it out of their hand and into yours  ·  they hold %d" % their_hand.size(),
+			"enabled": occupied[other] != id, "why": "your nemesis is standing there",
+			"value": 2.6 + 0.4 * float(their_hand.size()) + (0.8 if demand[taste] >= 2 else 0.0),
+		})
+		pinch_rows += 1
+
+	# A rumour: cool everybody near the stream who was warming to them.
+	var theirs_near := 0
+	for p in people:
+		if p.kind == Arch.Kind.NEUTRAL and p.curious_for == other and p.curiosity > 0.0 \
+				and p.global_position.distance_to(office.stream_point) <= Arch.STREAM_RADIUS:
+			theirs_near += 1
+	if theirs_near > 0:
+		opts.append({
+			"id": "rumour", "kind": "rumour", "station": "stream", "pos": office.stream_point,
+			"label": "Spread a rumour",
+			"sub": "%d by the water were warming to them; this cools every one of them" % theirs_near,
+			"enabled": occupied[other] != "stream", "why": "your nemesis is there",
+			"value": 1.1 * float(theirs_near),
+		})
+
+	# Rig the projector: their best slide comes up blank, unless they check it.
+	# Never on the last move: a rig they have no move left to check is not a
+	# trick, it is a tax on whoever moved first.
+	if not rigged[other] and not _presented[other] and their_hand.size() >= 1 \
+			and move_no < Arch.MOVES_PER_ROUND:
+		opts.append({
+			"id": "rig", "kind": "rig", "station": "rock", "pos": office.rock_point,
+			"label": "Rig the projector",
+			"sub": "their best slide comes up blank at their talk - unless they spend a move to check it",
+			"enabled": occupied[other] != "rock", "why": "your nemesis is at the rock",
+			"value": (2.4 if their_hand.size() >= 2 else 1.0),
+		})
+	if rigged[side]:
+		opts.append({
+			"id": "check", "kind": "check", "station": "rock", "pos": office.rock_point,
+			"label": "Check the projector",
+			"sub": "it has been rigged against you; this puts it right",
+			"enabled": occupied[other] != "rock", "why": "your nemesis is at the rock",
+			"value": 2.2 if satchel[side].size() >= 2 else 0.9,
+		})
+
 	# Buying people. One card, one person, if you can reach them from a station.
 	for t in _poach_targets(side):
 		opts.append(t)
@@ -411,7 +497,7 @@ func _options_for(side: int) -> Array:
 	opts.append({
 		"id": "present", "kind": "present", "station": "rock", "pos": office.rock_point,
 		"label": "Present now",
-		"sub": "%d slide%s in hand; the room is what it is" % [satchel[side].size(), "" if satchel[side].size() == 1 else "s"],
+		"sub": ("%d slide%s in hand; the room is what it is" % [satchel[side].size(), "" if satchel[side].size() == 1 else "s"]) + (" - PROJECTOR RIGGED, your best slide will be blank" if rigged[side] else ""),
 		"enabled": true,
 		"value": (2.5 if satchel[side].size() >= Arch.SLIDES_PER_TALK else -1.0),
 	})
@@ -567,8 +653,9 @@ func _on_interact() -> void:
 	_awaiting_manual = false
 	_busy = true
 	var opt := {}
+	# By hand, a station is its plain verb; the tricks and bribes are cards.
 	for o in _options_for(Arch.Side.PLAYER):
-		if o["station"] == sid and o["kind"] != "poach":
+		if o["station"] == sid and o["kind"] in ["desk", "stream", "break", "present"]:
 			opt = o
 			break
 	if opt.is_empty():
@@ -605,6 +692,14 @@ func _execute(side: int, opt: Dictionary, walk: bool) -> void:
 			_act_break(side)
 		"heckler":
 			_act_heckler(side)
+		"pinch":
+			_act_pinch(side, int(opt["taste"]))
+		"rumour":
+			_act_rumour(side)
+		"rig":
+			_act_rig(side)
+		"check":
+			_act_check(side)
 		"poach":
 			_act_poach(side, opt["target"], int(opt["card"]))
 		"present":
@@ -705,6 +800,80 @@ func _act_heckler(side: int) -> void:
 	else:
 		hud.toast("They turned %s into a heckler." % q.person_name)
 	_note_lead()
+
+
+# --- sabotage ----------------------------------------------------------------
+
+func _other(side: int) -> int:
+	return Arch.Side.NEMESIS if side == Arch.Side.PLAYER else Arch.Side.PLAYER
+
+
+func _act_pinch(side: int, taste: int) -> void:
+	var other := _other(side)
+	for i in range(satchel[other].size()):
+		if int(satchel[other][i]["taste"]) == taste:
+			var card: Dictionary = satchel[other][i]
+			satchel[other].remove_at(i)
+			satchel[side].append(card)
+			if side == Arch.Side.PLAYER:
+				hud.toast("Pinched their %s. It is yours now." % card["name"])
+				sabotage_log[Arch.Side.NEMESIS].append("you pinched their %s" % Arch.TASTE_NAME[taste])
+			else:
+				hud.toast("They pinched your %s right off the desk." % card["name"])
+				sabotage_log[Arch.Side.PLAYER].append("they pinched your %s" % Arch.TASTE_NAME[taste])
+			return
+
+
+func _act_rumour(side: int) -> void:
+	var other := _other(side)
+	var cooled := 0
+	for p in people:
+		if p.kind == Arch.Kind.NEUTRAL and p.curious_for == other and p.curiosity > 0.0 \
+				and p.global_position.distance_to(office.stream_point) <= Arch.STREAM_RADIUS:
+			p.warm(Arch.RUMOUR_CHILL, side)
+			cooled += 1
+	if side == Arch.Side.PLAYER:
+		hud.toast("A word by the water. %d went cold on them." % cooled)
+		sabotage_log[Arch.Side.NEMESIS].append("your rumour cooled %d" % cooled)
+	else:
+		hud.toast("They have been talking about you by the water. %d of yours went cold." % cooled)
+		sabotage_log[Arch.Side.PLAYER].append("their rumour cooled %d of yours" % cooled)
+
+
+func _act_rig(side: int) -> void:
+	var other := _other(side)
+	rigged[other] = true
+	if side == Arch.Side.PLAYER:
+		hud.toast("Projector rigged. Their best slide will be a blank.")
+	else:
+		hud.toast("They were at the rock. Your projector has been rigged - check it, or present blind.")
+
+
+func _act_check(side: int) -> void:
+	rigged[side] = false
+	if side == Arch.Side.PLAYER:
+		hud.toast("Projector checked and put right.")
+	else:
+		hud.toast("They checked the projector. Your rig is undone.")
+
+
+## A rigged projector fires now: the slide the room most wanted goes blank.
+func _spring_rig(side: int) -> void:
+	if not rigged[side] or satchel[side].is_empty():
+		rigged[side] = false
+		return
+	rigged[side] = false
+	var demand := _demand(side)
+	var best := 0
+	for i in range(satchel[side].size()):
+		if int(demand.get(int(satchel[side][i]["taste"]), 0)) > int(demand.get(int(satchel[side][best]["taste"]), 0)):
+			best = i
+	var lost: Dictionary = satchel[side][best]
+	satchel[side][best] = {"taste": -1, "name": Arch.DUD_NAME}
+	if side == Arch.Side.PLAYER:
+		hud.toast("The projector was rigged. Your %s is a blank slide." % lost["name"])
+	else:
+		hud.toast("Their projector was rigged. Their %s came up blank." % lost["name"])
 
 
 ## Spend a card on a person. The card is gone; the person is yours.
@@ -856,6 +1025,7 @@ func _present(side: int) -> void:
 	hud.banner("Gathering at the rock…", 2.0)
 	await get_tree().create_timer(3.4).timeout
 
+	_spring_rig(side)
 	talk_ui.begin(side, satchel[side], assembled[0], assembled[1], round_no)
 	var result: Dictionary = await talk_ui.finished
 	_apply_talk(result)

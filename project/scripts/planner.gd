@@ -125,8 +125,8 @@ func _clear() -> void:
 func _button(text: String, enabled: bool) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.add_theme_font_size_override("font_size", 15)
-	b.custom_minimum_size = Vector2(560, 34)
+	b.add_theme_font_size_override("font_size", 14)
+	b.custom_minimum_size = Vector2(560, 30)
 	b.focus_mode = Control.FOCUS_NONE
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.disabled = not enabled
@@ -148,8 +148,9 @@ func _card(fill: Color, left: int = 16) -> StyleBoxFlat:
 	sb.bg_color = fill
 	sb.border_color = INK
 	sb.set_border_width_all(3)
-	# Kept tight: up to nine cards have to fit a short browser window.
-	sb.set_content_margin_all(5)
+	# Kept tight: with the tricks on the table this can be fifteen rows, and
+	# they all have to fit a short browser window.
+	sb.set_content_margin_all(4)
 	sb.content_margin_left = left
 	return sb
 

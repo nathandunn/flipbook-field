@@ -32,9 +32,9 @@ answer the other side. It was dull for the same reason a card game with no
 interaction is dull. The rules now:
 
 - **Moves alternate.** You, them, you, them — four each — then both of you
-  present and the round is scored. Whoever is behind moves first; on level terms
-  it alternates. The second mover gets first pick of whoever the first just made
-  curious, so moving first is not free.
+  present and the round is scored. Whoever is behind moves *second* — the last
+  move of a round is the one nothing can answer, so the underdog gets it. On
+  level terms it alternates.
 - **The board is public, the hands are hidden.** The HUD always shows what the
   room wants (*Data · Story · Gadget · Snacks*) and how many cards the other side
   holds. What those cards are, you find out at their talk.
@@ -72,6 +72,23 @@ myself** skips the cards altogether and the station you press `E` at is your mov
 - **Send a heckler** — one follower turns sour. See pieces, above.
 - **Buy somebody** — spend a matching card on one of theirs.
 - **Present now** — go to the rock early, with whatever is in hand.
+
+## Sabotage
+
+Both ways, every round, and never hidden: everything done to you is printed on
+the HUD the moment it happens, and every trick has a counter.
+
+- **Pinch their card** — stand at the desk of a taste they hold and take one
+  out of their hand into yours. Counter: stand on that desk yourself (it blocks
+  them), or present before they get there.
+- **Spread a rumour** — at the stream, cool everybody who was warming to them.
+  Counter: close your curious people before they get to the water.
+- **Rig the projector** — at the rock, without presenting. Their best slide
+  comes up blank at their talk. Counter: **Check the projector**, a move at the
+  rock that puts it right — one move for one move. A rig is never allowed on the
+  last move of a round, so there is always time to answer it.
+
+The nemesis does all of this to you, with the same cards and the same numbers.
 
 **The talk.** Your crowd assembles: your people, plus neutrals curious about you
 drawn in by how big the crowd looks, plus anyone who came to boo. You play up to
@@ -118,10 +135,11 @@ after the redesign:
 
 | | greedy vs nemesis | random vs nemesis |
 |---|---|---|
-| wins / ties / losses | 3 / 1 / 4 | 0 / 1 / 7 |
-| mean margin | 1.5 people | 4.5 people |
-| lead changes per match | 1.0 | 0.1 |
-| decisions per match | ~30 | ~18 |
+| wins / ties / losses | 6 / 4 / 6 (16 matches) | 1 / 0 / 7 |
+| mean margin | 1.8 people | 3.5 people |
+| lead changes per match | 0.75 | 0.4 |
+| decisions per match | ~27 | ~23 |
+| cards blocked by the other side | 17% | 16% |
 
 Which is what a fair two-player game looks like from the outside: level against
 an equal, punished for playing at random, and the lead moving during the match.

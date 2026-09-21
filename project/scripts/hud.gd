@@ -80,11 +80,15 @@ func set_props(props: Array) -> void:
 
 ## [param demand] maps taste -> how many people likely at your talk want it.
 ## Shown always, because a card game where you cannot see the table is a guess.
-func set_demand(demand: Dictionary, their_hand: int) -> void:
+## [param flags] is what has been done to you and by you this round - a
+## rigged projector, a pinched card - so sabotage is never a surprise.
+func set_demand(demand: Dictionary, their_hand: int, flags: String = "") -> void:
 	var parts: Array[String] = []
 	for t in range(4):
 		parts.append("%s %d" % [Arch.TASTE_NAME[t], int(demand.get(t, 0))])
 	_demand_label.text = "room wants:  " + "  ·  ".join(parts) + "        their hand: %d" % their_hand
+	if flags != "":
+		_demand_label.text += "        " + flags
 
 
 func set_actions(left: int, total: int) -> void:

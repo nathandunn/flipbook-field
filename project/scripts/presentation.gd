@@ -102,7 +102,7 @@ func _ask_slide() -> void:
 		var p: Dictionary = _props[i]
 		var want := _wanting(p["taste"])
 		var b := _button("%s  —  %s   (%d in the crowd want %s)" % [
-			p["name"], Arch.TASTE_NAME[p["taste"]], want, Arch.TASTE_NAME[p["taste"]]
+			p["name"], Arch.taste_label(p["taste"]), want, Arch.taste_label(p["taste"])
 		])
 		b.pressed.connect(_on_slide_picked.bind(i))
 
@@ -238,7 +238,8 @@ func _score_slide(taste: int) -> Array:
 	for p in _audience:
 		if Arch.boos(p.kind):
 			boos += Arch.BOO_BULLY if p.kind == Arch.Kind.BULLY else Arch.BOO_BASE
-		elif Arch.claps(p.kind):
+		elif Arch.claps(p.kind) and taste >= 0:
+			# A blank slide (a rigged projector) gets nothing, not even loyalty.
 			claps += Arch.CLAP_MATCH if p.taste == taste else Arch.CLAP_LOYAL
 		# Wage slaves attend and say nothing. That is the joke and the mechanic:
 		# they are crowd size, which is what draws spectators, and nothing else.

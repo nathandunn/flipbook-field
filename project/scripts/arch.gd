@@ -99,6 +99,15 @@ const POACH_RADIUS := 9.0
 ## Haters needed before one of them goes to bully the other side's talk.
 const BULLY_FROM_HATERS := 2
 
+## Sabotage. Every dirty trick has a station, a tell on the HUD, and a counter.
+## Pinching a card needs the desk of that taste; a rumour needs the stream and
+## only cools people curious about *them*; rigging the projector needs the rock
+## and swaps their best slide for a blank one, unless they go and check it.
+## Rumours cool this much curiosity.
+const RUMOUR_CHILL := 1.0
+## What a rigged projector puts up instead of their best slide.
+const DUD_NAME := "A Blank Slate"
+
 ## Whoever has fewer people gets this many extra spectator slots at their talk.
 ## A chess game with no way back is a game you stop playing at move ten.
 const UNDERDOG_SLOTS := 1
@@ -113,6 +122,11 @@ static func heckles_per_talk(round_no: int) -> int:
 ## same number of spectators, so the final talks are the big ones.
 static func spectator_per_heads(round_no: int) -> int:
 	return SPECTATOR_PER_HEADS if round_no < ROUNDS_PER_MATCH else 2
+
+
+## Taste name, tolerant of the dud slide's -1.
+static func taste_label(taste: int) -> String:
+	return TASTE_NAME[taste] if TASTE_NAME.has(taste) else "nothing"
 
 
 static func side_color(side: int) -> Color:
