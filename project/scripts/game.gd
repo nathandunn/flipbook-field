@@ -36,7 +36,6 @@ enum Phase { PLAYER_TURN, TALK, NEMESIS_TURN, ROUND_END, MATCH_OVER }
 
 @export var world_seed: int = 0
 @export var neutral_count: int = 12
-@export var starting_followers: int = 3
 @export var starting_haters: int = 1
 
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
@@ -95,6 +94,12 @@ var _busy: bool = false
 var talk_cam: Camera3D
 
 var planner: Planner
+var setup: Setup
+## Who each side is: a job, four stats (charm, guile, hustle, grit), and the
+## colleagues they started with. See Arch.Role.
+var roles := {Arch.Side.PLAYER: Arch.Role.STAFF, Arch.Side.NEMESIS: Arch.Role.STAFF}
+var stats := {Arch.Side.PLAYER: [1, 1, 1, 1], Arch.Side.NEMESIS: [1, 1, 1, 1]}
+var parties := {Arch.Side.PLAYER: [], Arch.Side.NEMESIS: []}
 ## True while a move is being walked. Cleared by "Take over".
 var _auto: bool = false
 ## True while waiting for the player to walk to a station and press E.
@@ -131,10 +136,88 @@ func _ready() -> void:
 	planner.manual.connect(_on_manual)
 	planner.took_over.connect(_on_took_over)
 
+	setup = Setup.new()
+	setup.name = "Setup"
+	$UI.add_child(setup)
+
 	hud.set_hint(
 		"Pick a card each move, or Play it myself · WASD move · Shift run · E act · Esc free mouse"
 	)
+	_start()
+
+
+## Who are you, and who is with you - then the match.
+func _start() -> void:
+	_busy = true
+	player.input_locked = true
+	setup.open()
+	var cfg: Dictionary = await setup.done
+	_apply_setup(cfg)
 	_begin_round()
+
+
+func _apply_setup(cfg: Dictionary) -> void:
+	roles[Arch.Side.PLAYER] = int(cfg["role"])
+	stats[Arch.Side.PLAYER] = Array(cfg["stats"])
+	parties[Arch.Side.PLAYER] = Array(cfg["party"])
+	player.dress(roles[Arch.Side.PLAYER])
+	player.auto_speed = 4.4 * (1.0 + 0.08 * float(stats[Arch.Side.PLAYER][2]))
+
+	# The nemesis is dealt the same way: a job, the same free points, as many
+	# colleagues as you took. Different picks, equal means.
+	var nr: int = Arch.PLAYABLE[rng.randi() % Arch.PLAYABLE.size()]
+	roles[Arch.Side.NEMESIS] = nr
+	var ns: Array = Array(Arch.ROLE_STATS[nr]).duplicate()
+	for i in range(Arch.FREE_POINTS):
+		var k := int(rng.randi() % 4)
+		if int(ns[k]) >= Arch.STAT_MAX:
+			k = (k + 1) % 4
+		ns[k] = int(ns[k]) + 1
+	stats[Arch.Side.NEMESIS] = ns
+	nemesis.dress(nr)
+	var np: Array = []
+	for i in range(parties[Arch.Side.PLAYER].size()):
+		np.append(Arch.PLAYABLE[rng.randi() % Arch.PLAYABLE.size()])
+	parties[Arch.Side.NEMESIS] = np
+
+	_spawn_parties()
+	var names: Array[String] = []
+	for r in np:
+		names.append(Arch.ROLE_NAME[r])
+	hud.toast("Your nemesis is %s, with %s." % [Arch.ROLE_NAME[nr], ", ".join(names) if names.size() > 0 else "nobody"], 4.0)
+	var mine: Array[String] = []
+	for r in parties[Arch.Side.PLAYER]:
+		mine.append(Arch.ROLE_NAME[r])
+	hud.set_hint("You: %s · party: %s · nemesis: %s · pick a card each move, or Play it myself" % [
+		Arch.ROLE_NAME[roles[Arch.Side.PLAYER]], ", ".join(mine), Arch.ROLE_NAME[nr]])
+
+
+## The colleagues each side starts with, standing near their own end.
+func _spawn_parties() -> void:
+	var pp: Array = parties[Arch.Side.PLAYER]
+	for i in range(pp.size()):
+		var a := TAU * float(i) / float(pp.size())
+		_add_person(Arch.Kind.FOLLOWER, Arch.Side.PLAYER,
+			Office.DESK_CLUSTER + Vector3(cos(a) * 3.5, 0, sin(a) * 3.0 + 4.0), int(pp[i]))
+	var nq: Array = parties[Arch.Side.NEMESIS]
+	for i in range(nq.size()):
+		var a := TAU * float(i) / float(nq.size())
+		_add_person(Arch.Kind.FOLLOWER, Arch.Side.NEMESIS,
+			Office.BREAK_POS + Vector3(cos(a) * 3.5, 0, sin(a) * 3.0), int(nq[i]))
+
+
+## Does this side have one of these jobs clapping for it? That is the whole
+## test for a class rule, so buying their IT person switches it off for them
+## and on for you.
+func _has(side: int, role: int) -> bool:
+	for p in people:
+		if p.side == side and p.role == role and Arch.claps(p.kind):
+			return true
+	return false
+
+
+func _stat(side: int, i: int) -> int:
+	return int(stats[side][i])
 
 
 # --- setup -------------------------------------------------------------------
@@ -162,10 +245,12 @@ func _deal_face() -> int:
 	return _face_deck.pop_back()
 
 
-func _add_person(kind: int, side: int, at: Vector3) -> Person:
+func _add_person(kind: int, side: int, at: Vector3, role: int = -1) -> Person:
 	var p := Person.create(_pick_name(), kind, side, rng.randf_range(0.0, 10.0))
 	p.face_index = _deal_face()
-	p.taste = rng.randi() % 4
+	p.role = role if role >= 0 else Arch.random_role(rng)
+	var tastes: Array = Arch.ROLE_TASTES[p.role]
+	p.taste = int(tastes[rng.randi() % tastes.size()])
 	add_child(p)
 	p.global_position = at + Vector3(0, 0.1, 0)
 	p.home_pos = at
@@ -174,16 +259,7 @@ func _add_person(kind: int, side: int, at: Vector3) -> Person:
 
 
 func _spawn_people() -> void:
-	for i in range(starting_followers):
-		var a := TAU * float(i) / float(starting_followers)
-		_add_person(Arch.Kind.FOLLOWER, Arch.Side.PLAYER,
-			Office.DESK_CLUSTER + Vector3(cos(a) * 3.5, 0, sin(a) * 3.0 + 4.0))
-
-	for i in range(starting_followers):
-		var a := TAU * float(i) / float(starting_followers)
-		_add_person(Arch.Kind.FOLLOWER, Arch.Side.NEMESIS,
-			Office.BREAK_POS + Vector3(cos(a) * 3.5, 0, sin(a) * 3.0))
-
+	# Followers come from the setup screen now: your party, and theirs.
 	# Both sides open with the same pieces. A hater is a piece you cannot clap
 	# with but can send to the other side's talk, which is what makes it worth
 	# having and worth guarding against.
@@ -195,10 +271,15 @@ func _spawn_people() -> void:
 
 	# The contested pool. Scattered wide on purpose: reaching them costs walking,
 	# which is what makes the move budget bite.
+	var ceo_seen := false
 	for i in range(neutral_count):
 		var a := rng.randf_range(0, TAU)
 		var d := rng.randf_range(6.0, 20.0)
-		_add_person(Arch.Kind.NEUTRAL, Arch.Side.NONE, Vector3(cos(a) * d, 0, sin(a) * d * 0.8))
+		var q := _add_person(Arch.Kind.NEUTRAL, Arch.Side.NONE, Vector3(cos(a) * d, 0, sin(a) * d * 0.8))
+		if q.role == Arch.Role.CEO:
+			if ceo_seen:
+				q.role = Arch.Role.STAFF
+			ceo_seen = true
 
 	nemesis = Person.create("Your Nemesis", Arch.Kind.FOLLOWER, Arch.Side.NEMESIS, 3.3)
 	nemesis.face_index = NEMESIS_FACE
@@ -258,10 +339,10 @@ func _begin_round() -> void:
 		_refresh_hud()
 
 	_send_bullies()
-	if not _presented[Arch.Side.PLAYER]:
-		await _present(Arch.Side.PLAYER)
-	if not _presented[Arch.Side.NEMESIS]:
-		await _present(Arch.Side.NEMESIS)
+	# Talks in move order too: whoever had the last word presents second.
+	for side in ([Arch.Side.PLAYER, Arch.Side.NEMESIS] if first == Arch.Side.PLAYER else [Arch.Side.NEMESIS, Arch.Side.PLAYER]):
+		if not _presented[side]:
+			await _present(side)
 	_end_round()
 
 
@@ -392,12 +473,13 @@ func _options_for(side: int) -> Array:
 	for p in people:
 		if p.is_curious_for(side) and p.global_position.distance_to(office.stream_point) <= Arch.STREAM_RADIUS:
 			curious += 1
+	var close_max := _close_max(side)
 	opts.append({
 		"id": "stream", "kind": "stream", "station": "stream", "pos": office.stream_point,
 		"label": "Stream",
-		"sub": ("close up to %d of the %d curious about you there" % [Arch.STREAM_CLOSE_MAX, curious]) if curious > 0 else "nobody curious about you there yet - warms them a little",
+		"sub": ("close up to %d of the %d curious about you there" % [close_max, curious]) if curious > 0 else "nobody curious about you there yet - warms them a little",
 		"enabled": occupied[other] != "stream", "why": "your nemesis is there",
-		"value": minf(float(curious), float(Arch.STREAM_CLOSE_MAX)) * 2.6 + (0.4 if curious == 0 else 0.0),
+		"value": minf(float(curious), float(close_max)) * 2.6 + (0.4 if curious == 0 else 0.0),
 	})
 
 	var exposed := 0
@@ -445,12 +527,14 @@ func _options_for(side: int) -> Array:
 		if di < 0:
 			continue
 		var id := "desk:%d" % di
+		var legal := _has(other, Arch.Role.LEGAL)
 		opts.append({
 			"id": "pinch:%d" % taste, "kind": "pinch", "taste": taste, "station": id, "pos": office.desk_points[di],
 			"label": "Pinch their %s card" % Arch.TASTE_NAME[taste],
 			"sub": "take it out of their hand and into yours  ·  they hold %d" % their_hand.size(),
-			"enabled": occupied[other] != id, "why": "your nemesis is standing there",
-			"value": 2.6 + 0.4 * float(their_hand.size()) + (0.8 if demand[taste] >= 2 else 0.0),
+			"enabled": occupied[other] != id and not legal,
+			"why": "their Legal has the desk locked" if legal else "your nemesis is standing there",
+			"value": 2.6 + 0.4 * float(their_hand.size()) + (0.8 if demand[taste] >= 2 else 0.0) + 0.3 * _stat(side, 1),
 		})
 		pinch_rows += 1
 
@@ -464,9 +548,9 @@ func _options_for(side: int) -> Array:
 		opts.append({
 			"id": "rumour", "kind": "rumour", "station": "stream", "pos": office.stream_point,
 			"label": "Spread a rumour",
-			"sub": "%d by the water were warming to them; this cools every one of them" % theirs_near,
+			"sub": "%d by the water were warming to them; cools each by %.1f" % [theirs_near, _chill(side)],
 			"enabled": occupied[other] != "stream", "why": "your nemesis is there",
-			"value": 1.1 * float(theirs_near),
+			"value": 1.1 * float(theirs_near) * (_chill(side) / Arch.RUMOUR_CHILL),
 		})
 
 	# Rig the projector: their best slide comes up blank, unless they check it.
@@ -474,12 +558,14 @@ func _options_for(side: int) -> Array:
 	# trick, it is a tax on whoever moved first.
 	if not rigged[other] and not _presented[other] and their_hand.size() >= 1 \
 			and move_no < Arch.MOVES_PER_ROUND:
+		var it := _has(other, Arch.Role.IT)
 		opts.append({
 			"id": "rig", "kind": "rig", "station": "rock", "pos": office.rock_point,
 			"label": "Rig the projector",
 			"sub": "their best slide comes up blank at their talk - unless they spend a move to check it",
-			"enabled": occupied[other] != "rock", "why": "your nemesis is at the rock",
-			"value": (2.4 if their_hand.size() >= 2 else 1.0),
+			"enabled": occupied[other] != "rock" and not it,
+			"why": "their IT has it locked down" if it else "your nemesis is at the rock",
+			"value": (2.4 if their_hand.size() >= 2 else 1.0) + 0.3 * _stat(side, 1),
 		})
 	if rigged[side]:
 		opts.append({
@@ -504,6 +590,22 @@ func _options_for(side: int) -> Array:
 	return opts
 
 
+## How many the stream closes for this side: Sales sells.
+func _close_max(side: int) -> int:
+	return Arch.STREAM_CLOSE_MAX + (1 if _has(side, Arch.Role.SALES) else 0)
+
+
+## How hard this side's rumours cool: guile, doubled by Marketing.
+func _chill(side: int) -> float:
+	var c: float = Arch.RUMOUR_CHILL + 0.4 * float(_stat(side, 1))
+	return c * 2.0 if _has(side, Arch.Role.MARKETING) else c
+
+
+## How far this side can reach to buy somebody: hustle, and Sales.
+func _reach(side: int) -> float:
+	return Arch.POACH_RADIUS + 1.5 * float(_stat(side, 2)) + (3.0 if _has(side, Arch.Role.SALES) else 0.0)
+
+
 ## What a desk visit at [param from] would do to the neutrals nearby:
 ## [newly curious about me, taken off the other side's list]. Same arithmetic
 ## as _warm_nearest, so the number on the card is the number that happens.
@@ -516,7 +618,7 @@ func _warm_preview(from: Vector3, side: int) -> Array:
 		return a.global_position.distance_to(from) < b.global_position.distance_to(from))
 	var fresh := 0
 	var stolen := 0
-	for i in range(mini(Arch.WARM_COUNT, pool.size())):
+	for i in range(mini(Arch.WARM_COUNT + (1 if _has(side, Arch.Role.INTERN) else 0), pool.size())):
 		var q := pool[i]
 		if q.global_position.distance_to(from) > 16.0:
 			break
@@ -551,6 +653,9 @@ func _poach_targets(side: int, limit: int = 2) -> Array:
 			if int(satchel[side][i]["taste"]) == p.taste:
 				card = i
 				break
+		# An intern goes with whoever is holding anything at all.
+		if card < 0 and p.role == Arch.Role.INTERN and satchel[side].size() > 0:
+			card = 0
 		if card < 0:
 			continue
 		# The nearest station to them is where you would stand to make the offer.
@@ -563,7 +668,7 @@ func _poach_targets(side: int, limit: int = 2) -> Array:
 			if d < best_d:
 				best_d = d
 				best_st = st
-		if best_st.is_empty() or best_d > Arch.POACH_RADIUS:
+		if best_st.is_empty() or best_d > _reach(side):
 			continue
 		var sid := _station_id(best_st)
 		var prop: Dictionary = satchel[side][card]
@@ -571,7 +676,7 @@ func _poach_targets(side: int, limit: int = 2) -> Array:
 			"id": "poach:%s" % p.person_name, "kind": "poach", "station": sid, "pos": best_st["pos"],
 			"target": p, "card": card,
 			"label": "Buy %s" % p.person_name,
-			"sub": "they want %s - spend your %s, at the %s" % [Arch.TASTE_NAME[p.taste], prop["name"], best_st["label"].to_lower()],
+			"sub": "%s, wants %s - spend your %s, at the %s" % [Arch.ROLE_NAME[p.role], Arch.TASTE_NAME[p.taste], prop["name"], best_st["label"].to_lower()],
 			"enabled": occupied[other] != sid, "why": "your nemesis is standing there",
 			"value": 4.2,
 			"walk": from.distance_to(best_st["pos"]),
@@ -679,8 +784,10 @@ func _execute(side: int, opt: Dictionary, walk: bool) -> void:
 				await _manual_move()
 				return
 			_auto = false
+			_snap_to(player, opt["pos"])
 	else:
 		await _walk_to(nemesis, opt["pos"])
+		_snap_to(nemesis, opt["pos"])
 
 	occupied[side] = opt["station"]
 	match String(opt["kind"]):
@@ -710,6 +817,15 @@ func _execute(side: int, opt: Dictionary, walk: bool) -> void:
 		await get_tree().create_timer(0.7).timeout
 
 
+## The walk is the picture; the move is the rule. If a stump or a desk got in
+## the way, the mover still ends up at the station, for either side, so the
+## match is never decided by who tripped.
+func _snap_to(who: Node3D, pos: Vector3) -> void:
+	var flat := Vector3(pos.x, who.global_position.y, pos.z)
+	if who.global_position.distance_to(flat) > 1.2:
+		who.global_position = flat + Vector3(0, 0.05, 0)
+
+
 func _walk_player_to(pos: Vector3, max_time: float = 16.0) -> void:
 	player.auto_target = pos
 	var t := 0.0
@@ -730,7 +846,7 @@ func _act_desk(side: int, taste: int) -> void:
 
 	# The pile of stuff is what makes people curious. Warming is a side effect of
 	# gathering, which is what keeps the stream from being the only good move.
-	var warmed := _warm_nearest(_actor_pos(side), Arch.WARM_COUNT, Arch.WARM_AMOUNT, side)
+	var warmed := _warm_nearest(_actor_pos(side), Arch.WARM_COUNT + (1 if _has(side, Arch.Role.INTERN) else 0), Arch.WARM_AMOUNT, side)
 	if side == Arch.Side.PLAYER:
 		hud.toast("Took %s. %d nearby got curious." % [prop["name"], warmed])
 	else:
@@ -757,7 +873,7 @@ func _act_stream(side: int) -> void:
 	curious.sort_custom(func(a, b): return a.curiosity > b.curiosity)
 	var taken := 0
 	for p in curious:
-		if taken >= Arch.STREAM_CLOSE_MAX:
+		if taken >= _close_max(side):
 			break
 		var kind := Arch.Kind.FOLLOWER
 		if p.curiosity >= Arch.CURIOSITY_MAX - 0.01 and rng.randf() < 0.3:
@@ -830,7 +946,7 @@ func _act_rumour(side: int) -> void:
 	for p in people:
 		if p.kind == Arch.Kind.NEUTRAL and p.curious_for == other and p.curiosity > 0.0 \
 				and p.global_position.distance_to(office.stream_point) <= Arch.STREAM_RADIUS:
-			p.warm(Arch.RUMOUR_CHILL, side)
+			p.warm(_chill(side), side)
 			cooled += 1
 	if side == Arch.Side.PLAYER:
 		hud.toast("A word by the water. %d went cold on them." % cooled)
@@ -1026,7 +1142,9 @@ func _present(side: int) -> void:
 	await get_tree().create_timer(3.4).timeout
 
 	_spring_rig(side)
-	talk_ui.begin(side, satchel[side], assembled[0], assembled[1], round_no)
+	talk_ui.begin(side, satchel[side], assembled[0], assembled[1], round_no, {
+		"charm": _stat(side, 0), "grit": _stat(side, 3), "engineer": _has(side, Arch.Role.ENGINEER),
+	})
 	var result: Dictionary = await talk_ui.finished
 	_apply_talk(result)
 	phase = was_phase
@@ -1036,10 +1154,13 @@ func _present(side: int) -> void:
 func _assemble(side: int) -> Array:
 	var other: int = Arch.Side.NEMESIS if side == Arch.Side.PLAYER else Arch.Side.PLAYER
 	var audience: Array = []
+	var hr := _has(side, Arch.Role.HR)
 	for p in people:
 		if p.side == side and p.kind != Arch.Kind.NEUTRAL:
 			audience.append(p)
 		elif p.side == other and Arch.boos(p.kind):
+			if p.kind == Arch.Kind.BULLY and hr:
+				continue  # HR at the door
 			audience.append(p)
 
 	# Crowd size pulls in passers-by; the underdog gets a hand up; in the last
@@ -1047,6 +1168,8 @@ func _assemble(side: int) -> Array:
 	var slots: int = int(floor(float(audience.size()) / float(Arch.spectator_per_heads(round_no))))
 	if _count(side) < _count(other):
 		slots += Arch.UNDERDOG_SLOTS
+	if _has(side, Arch.Role.CEO):
+		slots += 1
 	# The grass seats go to people curious about this side, nearest first.
 	var curious: Array[Person] = []
 	for p in people:

@@ -23,6 +23,7 @@ var _spectators: Array = []    ## Array[Person] - curious neutrals, the prize
 var _slide_idx: int = 0
 ## Round arc: how many times a heckler is allowed to interrupt this talk.
 var _round: int = 1
+var _mods: Dictionary = {}
 var _heckles: int = 0
 var _claps: float = 0.0
 var _boos: float = 0.0
@@ -64,8 +65,11 @@ func _label(size: int, col: Color) -> Label:
 
 ## [param audience] are the people who will clap or boo; [param spectators] are
 ## curious neutrals who convert on the claps-to-boos ratio.
-func begin(side: int, props: Array, audience: Array, spectators: Array, round_no: int = 1) -> void:
+## [param mods] is what the presenter brings: charm and grit from their stats,
+## and whether an engineer is clapping for them.
+func begin(side: int, props: Array, audience: Array, spectators: Array, round_no: int = 1, mods: Dictionary = {}) -> void:
 	_side = side
+	_mods = mods
 	_props = props.duplicate()
 	_audience = audience
 	_spectators = spectators
@@ -98,7 +102,11 @@ func _ask_slide() -> void:
 	_refresh_tally()
 	_clear_buttons()
 
-	for i in range(_props.size()):
+	# A pinched hand can run long; show the five the room most wants, so the
+	# panel fits a short window and the choice stays a choice.
+	var order: Array = range(_props.size())
+	order.sort_custom(func(a, b): return _wanting(_props[a]["taste"]) > _wanting(_props[b]["taste"]))
+	for i in order.slice(0, 5):
 		var p: Dictionary = _props[i]
 		var want := _wanting(p["taste"])
 		var b := _button("%s  —  %s   (%d in the crowd want %s)" % [
@@ -147,11 +155,18 @@ func _ask_heckle() -> void:
 
 func _on_heckle(clap_back: bool) -> void:
 	if not clap_back:
-		_boos += 3.0
-		_log.text = "You let it go. Scattered laughter. +3 boos."
+		var cost: float = maxf(1.0, 3.0 - float(_mods.get("grit", 0)))
+		_boos += cost
+		_log.text = "You let it go. Scattered laughter. +%d boos." % int(cost)
 		_ask_slide()
 		return
 
+	_clap_back()
+	_ask_slide()
+
+
+## The bold answer to a heckle, same odds for either presenter.
+func _clap_back() -> void:
 	# Lovers in the room are the ones who laugh first, which is what makes a
 	# comeback land. Every lover is a better chance.
 	var lovers := 0
@@ -177,7 +192,6 @@ func _on_heckle(clap_back: bool) -> void:
 			_log.text = "It does not land. +5 boos, and their bully walks somebody out."
 		else:
 			_log.text = "It does not land. +5 boos."
-	_ask_slide()
 
 
 # --- nemesis flow ------------------------------------------------------------
@@ -197,11 +211,12 @@ func _auto_run() -> void:
 		var res := _score_slide(p["taste"])
 		_claps += res[0]
 		_boos += res[1]
-		# They get heckled on the same schedule you do, and always let it go.
+		# They get heckled on the same schedule you do, and clap back on the
+		# same odds - the bold line is the better one, and they know it.
 		if i < Arch.SLIDES_PER_TALK - 1 and _hecklers() > 0 \
 				and _heckles < Arch.heckles_per_talk(_round):
 			_heckles += 1
-			_boos += 3.0
+			_clap_back()
 	_sub.text = _crowd_line()
 	_refresh_tally()
 	_log.text = "They got through it."
@@ -241,11 +256,15 @@ func _score_slide(taste: int) -> Array:
 		elif Arch.claps(p.kind) and taste >= 0:
 			# A blank slide (a rigged projector) gets nothing, not even loyalty.
 			claps += Arch.CLAP_MATCH if p.taste == taste else Arch.CLAP_LOYAL
+			if p.taste == taste and bool(_mods.get("engineer", false)) \
+					and (taste == Arch.Taste.DATA or taste == Arch.Taste.GADGET):
+				claps += 1.0
 		# Wage slaves attend and say nothing. That is the joke and the mechanic:
 		# they are crowd size, which is what draws spectators, and nothing else.
 	for p in _spectators:
 		if p.taste == taste:
 			claps += 1.0
+	claps *= 1.0 + 0.12 * float(_mods.get("charm", 0))
 	return [claps, boos]
 
 
@@ -293,7 +312,7 @@ func _wrap_up() -> void:
 
 	# Boo pressure, net of applause, peels people off. This is the whole reason
 	# haters matter: without it, boos are decoration and a lead never reverses.
-	var pressure: float = _boos - _claps * 0.6
+	var pressure: float = _boos - _claps * 0.6 - 4.0 * float(_mods.get("grit", 0))
 	var flips: int = int(floor(maxf(pressure, 0.0) / 14.0))
 	var lost: Array = []
 	var shields := 0

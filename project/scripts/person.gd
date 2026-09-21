@@ -31,6 +31,8 @@ var rig: BlockFigure
 ## Which drawing this person wears. Left at -1 it is drawn from their seed;
 ## [Game] sets it explicitly so no two people in a match share a face.
 var face_index: int = -1
+## The job, which is the costume, the taste and the rule. See Arch.Role.
+var role: int = Arch.Role.STAFF
 var home_pos := Vector3.ZERO
 
 var _target: Vector3 = Vector3.INF
@@ -65,24 +67,39 @@ func _ready() -> void:
 	add_child(shape)
 
 	if rig == null:
-		var rng := RandomNumberGenerator.new()
-		rng.seed = int(_idle_seed * 10000.0) + 7
-		rig = BlockFigure.create(
-			Ink.SKINS[rng.randi() % Ink.SKINS.size()],
-			Arch.side_color(side).lerp(Ink.SHIRTS[rng.randi() % Ink.SHIRTS.size()], 0.35),
-			Ink.PANTS[rng.randi() % Ink.PANTS.size()],
-			Ink.HAIRS[rng.randi() % Ink.HAIRS.size()],
-			rng.randf_range(0.88, 1.12),
-			_idle_seed,
-			face_index if face_index >= 0 else int(rng.randi() % Ink.FACE_COUNT)
-		)
-		rig.name = "Rig"
-		add_child(rig)
+		_make_rig()
 
 	_pip = MeshInstance3D.new()
 	_pip.name = "Pip"
 	_pip.mesh = BoxMesh.new()
 	add_child(_pip)
+	refresh()
+
+
+func _make_rig() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(_idle_seed * 10000.0) + 7
+	rig = BlockFigure.create(
+		Ink.SKINS[rng.randi() % Ink.SKINS.size()],
+		Arch.side_color(side).lerp(Ink.SHIRTS[rng.randi() % Ink.SHIRTS.size()], 0.35),
+		Ink.PANTS[rng.randi() % Ink.PANTS.size()],
+		Ink.HAIRS[rng.randi() % Ink.HAIRS.size()],
+		rng.randf_range(0.88, 1.12),
+		_idle_seed,
+		face_index if face_index >= 0 else int(rng.randi() % Ink.FACE_COUNT),
+		role
+	)
+	rig.name = "Rig"
+	add_child(rig)
+
+
+## Change job: a new costume on the same person.
+func dress(p_role: int) -> void:
+	role = p_role
+	if rig:
+		remove_child(rig)
+		rig.queue_free()
+	_make_rig()
 	refresh()
 
 

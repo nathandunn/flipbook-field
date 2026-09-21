@@ -129,6 +129,98 @@ static func taste_label(taste: int) -> String:
 	return TASTE_NAME[taste] if TASTE_NAME.has(taste) else "nothing"
 
 
+# --- Classes -----------------------------------------------------------------
+# Everybody in the office has a job, and the job is a costume, a taste, and a
+# rule. The rule belongs to whichever side has one of them clapping: buy their
+# IT person and their projector is open; lose your Legal and your hand is fair
+# game. That is what makes who you recruit a strategy and not a headcount.
+
+enum Role { CEO, ENGINEER, IT, HR, MARKETING, SALES, LEGAL, INTERN, STAFF }
+
+const ROLE_KEY := {
+	Role.CEO: "ceo", Role.ENGINEER: "engineer", Role.IT: "it", Role.HR: "hr",
+	Role.MARKETING: "marketing", Role.SALES: "sales", Role.LEGAL: "legal",
+	Role.INTERN: "intern", Role.STAFF: "staff",
+}
+const ROLE_NAME := {
+	Role.CEO: "CEO", Role.ENGINEER: "Engineer", Role.IT: "IT", Role.HR: "HR",
+	Role.MARKETING: "Marketing", Role.SALES: "Sales", Role.LEGAL: "Legal",
+	Role.INTERN: "Intern", Role.STAFF: "Staff",
+}
+## What each job wants to see on a slide. Two entries means either.
+const ROLE_TASTES := {
+	Role.CEO: [Taste.DATA, Taste.STORY], Role.ENGINEER: [Taste.DATA, Taste.GADGET],
+	Role.IT: [Taste.GADGET], Role.HR: [Taste.STORY], Role.MARKETING: [Taste.STORY, Taste.GADGET],
+	Role.SALES: [Taste.SNACK, Taste.GADGET], Role.LEGAL: [Taste.DATA],
+	Role.INTERN: [Taste.SNACK], Role.STAFF: [Taste.DATA, Taste.STORY, Taste.GADGET, Taste.SNACK],
+}
+## The rule a side gets while it has one of these clapping for it.
+const ROLE_PERK := {
+	Role.CEO: "one more seat on the grass at your talks",
+	Role.ENGINEER: "Data and Gadget slides land one extra clap per fan",
+	Role.IT: "your projector cannot be rigged",
+	Role.HR: "their bullies are turned away at the door",
+	Role.MARKETING: "your rumours cool twice as hard",
+	Role.SALES: "buy from further away, and the stream closes three",
+	Role.LEGAL: "your cards cannot be pinched",
+	Role.INTERN: "desks warm one more neutral; interns can be bought with any card",
+	Role.STAFF: "no rule; just here for the snacks",
+}
+## Where a job starts on the four stats, before free points: charm, guile,
+## hustle, grit.
+const ROLE_STATS := {
+	Role.CEO: [2, 1, 0, 1], Role.ENGINEER: [0, 1, 1, 2], Role.IT: [0, 2, 1, 1],
+	Role.HR: [1, 0, 1, 2], Role.MARKETING: [2, 2, 0, 0], Role.SALES: [2, 0, 2, 0],
+	Role.LEGAL: [0, 2, 0, 2], Role.INTERN: [1, 0, 3, 0], Role.STAFF: [1, 1, 1, 1],
+}
+## Jobs you can play and recruit; Staff is the anonymous crowd.
+const PLAYABLE := [Role.CEO, Role.ENGINEER, Role.IT, Role.HR, Role.MARKETING, Role.SALES, Role.LEGAL, Role.INTERN]
+## How common each job is among the neutrals on the grass.
+const ROLE_WEIGHT := {
+	Role.INTERN: 24, Role.ENGINEER: 18, Role.SALES: 14, Role.MARKETING: 12,
+	Role.HR: 10, Role.IT: 10, Role.LEGAL: 7, Role.CEO: 2, Role.STAFF: 3,
+}
+
+## The stats. Every one changes a number you can see on a card.
+const STAT_NAME := ["Charm", "Guile", "Hustle", "Grit"]
+const STAT_DESC := [
+	"claps from your slides, +12% a point",
+	"rumours cool harder and your tricks are worth more",
+	"buy from further away; walk faster",
+	"boos hurt less at your talk; a heckle ignored costs less",
+]
+const FREE_POINTS := 4
+const STAT_MAX := 5
+## Colleagues who start on your side. The nemesis gets the same number.
+const PARTY_MAX := 4
+
+
+static func role_tint(role: int) -> Color:
+	match role:
+		Role.CEO: return Color("5a4e63")
+		Role.ENGINEER: return Color("9c5a4a")
+		Role.IT: return Color("4f6b72")
+		Role.HR: return Color("b57f9a")
+		Role.MARKETING: return Color("c4614f")
+		Role.SALES: return Color("5b7fa6")
+		Role.LEGAL: return Color("3f4a52")
+		Role.INTERN: return Color("d8a94b")
+	return Color("a8a08e")
+
+
+## A job for a neutral, by the weights above.
+static func random_role(rng: RandomNumberGenerator) -> int:
+	var total := 0
+	for r in ROLE_WEIGHT:
+		total += int(ROLE_WEIGHT[r])
+	var pick := int(rng.randi() % total)
+	for r in ROLE_WEIGHT:
+		pick -= int(ROLE_WEIGHT[r])
+		if pick < 0:
+			return r
+	return Role.STAFF
+
+
 static func side_color(side: int) -> Color:
 	match side:
 		Side.PLAYER:

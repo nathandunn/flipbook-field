@@ -21,6 +21,8 @@ signal interact_pressed
 const PLAYER_FACE := 0
 
 var rig: BlockFigure
+## The job you chose at the start. Dressing happens in [method dress].
+var role: int = Arch.Role.STAFF
 var input_locked: bool = false
 
 ## When set, the character walks itself there and ignores the stick entirely.
@@ -50,12 +52,7 @@ var _move_amt: float = 0.0
 func _ready() -> void:
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)) * 1.8
 
-	rig = BlockFigure.create(
-		Ink.SKINS[2], Color("c4614f"), Ink.PANTS[0], Ink.HAIRS[1], 1.0, 0.0,
-		PLAYER_FACE
-	)
-	rig.name = "Rig"
-	add_child(rig)
+	dress(role)
 
 	_setup_ink_pass()
 
@@ -74,6 +71,21 @@ func _ready() -> void:
 		_capture_mouse(true)
 	else:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+## Put on a class's costume. Rebuilds the rig, so it is safe to call after the
+## setup screen has decided who you are.
+func dress(p_role: int) -> void:
+	role = p_role
+	if rig:
+		remove_child(rig)
+		rig.queue_free()
+	rig = BlockFigure.create(
+		Ink.SKINS[2], Color("c4614f"), Ink.PANTS[0], Ink.HAIRS[1], 1.0, 0.0,
+		PLAYER_FACE, role
+	)
+	rig.name = "Rig"
+	add_child(rig)
 
 
 func _is_web() -> bool:

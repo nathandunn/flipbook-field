@@ -8,6 +8,12 @@
 ## Animation is quantised to FLIPBOOK_FPS. That single line is most of the
 ## graphic-novel feel: smooth interpolation reads as 3D, stepped poses read as
 ## drawn frames.
+##
+## Since the classes arrived the figure is a paper doll: every part is a slim
+## slab with a drawing on its front and another on its back, so the costume
+## reads from any side and the walk still swings at the joints. The drawings
+## come from art/bodygen.py; the head's front is one of Nathan's, its back is
+## inferred from it.
 class_name BlockFigure
 extends Node3D
 
@@ -34,6 +40,10 @@ var hair: Color
 var figure_height: float = 1.0
 ## Which drawing this figure wears. See Ink.face_mat.
 var face: int = 0
+## Which costume. See Arch.Role and Ink.body_mat.
+var role: int = Arch.Role.STAFF
+## How thick a paper part is: enough to read from the side, no more.
+const SLAB := 0.12
 
 var head_pivot: Node3D
 var torso: Node3D
@@ -48,7 +58,8 @@ var _seed_offset: float = 0.0
 
 static func create(
 	p_skin: Color, p_shirt: Color, p_pants: Color, p_hair: Color,
-	p_height: float = 1.0, p_seed: float = 0.0, p_face: int = 0
+	p_height: float = 1.0, p_seed: float = 0.0, p_face: int = 0,
+	p_role: int = Arch.Role.STAFF
 ) -> BlockFigure:
 	var f := BlockFigure.new()
 	f.skin = p_skin
@@ -58,71 +69,75 @@ static func create(
 	f.figure_height = p_height
 	f._seed_offset = p_seed
 	f.face = p_face
+	f.role = p_role
 	f._build()
 	return f
 
 
 func _build() -> void:
 	scale = Vector3.ONE * figure_height
-
+	var key: String = Arch.ROLE_KEY.get(role, "staff")
+	var tint := Ink.mat(Arch.role_tint(role).lerp(Ink.PAPER, 0.35))
 	var skin_mat := Ink.mat(skin)
-	var shirt_mat := Ink.mat(shirt)
-	var pants_mat := Ink.mat(pants)
-	var hair_mat := Ink.mat(hair)
 
-	# Torso
+	# Torso: a slab in the costume's wash with the drawn front and back on it.
 	torso = Node3D.new()
 	torso.name = "Torso"
 	torso.position = Vector3(0, HIP_Y, 0)
 	add_child(torso)
-	_box(torso, Vector3(TORSO_W, TORSO_H, TORSO_D), Vector3(0, TORSO_H * 0.5, 0), shirt_mat, "TorsoBox")
+	_paper_part(torso, Vector2(TORSO_W, TORSO_H), Vector3(0, TORSO_H * 0.5, 0), tint,
+		Ink.body_mat(key, "torso_f"), Ink.body_mat(key, "torso_b"), "TorsoBox")
 
-	# Head, pivoting at the neck so it can turn to look at people.
+	# Head, pivoting at the neck so it can turn to look at people. The front is
+	# one of the drawings; the back is inferred from it; a slab between them
+	# gives the head mass from the side.
 	head_pivot = Node3D.new()
 	head_pivot.name = "Head"
 	head_pivot.position = Vector3(0, TORSO_H + 0.06, 0)
 	torso.add_child(head_pivot)
-	# The head is a drawing on paper, not a box of skin. A card carries one of
-	# the scanned faces; a slim slab sits behind it so the head has mass from the
-	# side and something opaque to hide the card's back.
-	#
-	# The card is on -Z because -Z is forward in Godot, which also makes it the
-	# "which way is this figure facing" readout while you're moving nodes around.
-	var back := _box(head_pivot,
-		Vector3(HEAD.x * 0.78, HEAD.y * 0.88, HEAD.z * 0.60),
-		Vector3(0, HEAD.y * 0.50, 0.02), hair_mat, "HeadBack")
-	back.name = "HeadBack"
+	_box(head_pivot, Vector3(HEAD.x * 0.78, HEAD.y * 0.88, HEAD.z * 0.46),
+		Vector3(0, HEAD.y * 0.50, 0.0), skin_mat, "HeadBack")
+	var front := _card(head_pivot, Vector2(CARD, CARD),
+		Vector3(0, HEAD.y * 0.46, -HEAD.z * 0.23 - 0.014), Ink.face_mat(face), "FaceCard")
+	front.rotation.y = PI
+	_card(head_pivot, Vector2(CARD, CARD),
+		Vector3(0, HEAD.y * 0.46, HEAD.z * 0.23 + 0.014), Ink.back_mat(face), "BackCard")
 
-	var card := MeshInstance3D.new()
-	card.name = "FaceCard"
+	# Arms and legs: pivots at shoulder and hip, a drawn strip hanging from each.
+	arm_l = _limb(torso, Vector3(-(TORSO_W * 0.5 + ARM_W * 0.5), TORSO_H - 0.06, 0),
+		Vector2(ARM_W, ARM_LEN), tint, Ink.body_mat(key, "arm"), "ArmL")
+	arm_r = _limb(torso, Vector3(TORSO_W * 0.5 + ARM_W * 0.5, TORSO_H - 0.06, 0),
+		Vector2(ARM_W, ARM_LEN), tint, Ink.body_mat(key, "arm"), "ArmR")
+	leg_l = _limb(self, Vector3(-0.13, HIP_Y, 0), Vector2(LEG_W, LEG_LEN), tint,
+		Ink.body_mat(key, "leg"), "LegL")
+	leg_r = _limb(self, Vector3(0.13, HIP_Y, 0), Vector2(LEG_W, LEG_LEN), tint,
+		Ink.body_mat(key, "leg"), "LegR")
+
+
+## A slab with a drawing on each face. [param size] is width x height; the
+## slab is centred on [param offset] and faces -Z.
+func _paper_part(parent: Node3D, size: Vector2, offset: Vector3, slab_mat: Material,
+		front: Material, back: Material, n: String) -> void:
+	_box(parent, Vector3(size.x * 0.92, size.y * 0.98, SLAB), offset, slab_mat, n)
+	var f := _card(parent, size, offset + Vector3(0, 0, -SLAB * 0.5 - 0.01), front, n + "Front")
+	f.rotation.y = PI
+	_card(parent, size, offset + Vector3(0, 0, SLAB * 0.5 + 0.01), back, n + "Back")
+
+
+## A flat drawing. Faces +Z as built; rotate it PI to face forward (-Z).
+func _card(parent: Node3D, size: Vector2, offset: Vector3, mat: Material, n: String) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = n
 	var quad := QuadMesh.new()
-	quad.size = Vector2(CARD, CARD)
-	card.mesh = quad
-	card.position = Vector3(0, HEAD.y * 0.46, -HEAD.z * 0.5 - 0.014)
-	card.rotation.y = PI
-	card.material_override = Ink.face_mat(face)
+	quad.size = size
+	mi.mesh = quad
+	mi.position = offset
+	mi.material_override = mat
 	# The inverted-hull outline belongs on solid shapes; on a flat card it would
 	# draw a black rectangle behind the drawing.
-	card.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	head_pivot.add_child(card)
-
-	# Arms
-	arm_l = _limb(torso, Vector3(-(TORSO_W * 0.5 + ARM_W * 0.5), TORSO_H - 0.06, 0),
-		Vector3(ARM_W, ARM_LEN, ARM_W), shirt_mat, "ArmL")
-	arm_r = _limb(torso, Vector3(TORSO_W * 0.5 + ARM_W * 0.5, TORSO_H - 0.06, 0),
-		Vector3(ARM_W, ARM_LEN, ARM_W), shirt_mat, "ArmR")
-	# Hands, so the arm ends in something.
-	_box(arm_l, Vector3(ARM_W + 0.01, 0.12, ARM_W + 0.01), Vector3(0, -ARM_LEN + 0.06, 0), skin_mat, "HandL")
-	_box(arm_r, Vector3(ARM_W + 0.01, 0.12, ARM_W + 0.01), Vector3(0, -ARM_LEN + 0.06, 0), skin_mat, "HandR")
-
-	# Legs
-	leg_l = _limb(self, Vector3(-0.13, HIP_Y, 0), Vector3(LEG_W, LEG_LEN, LEG_W), pants_mat, "LegL")
-	leg_r = _limb(self, Vector3(0.13, HIP_Y, 0), Vector3(LEG_W, LEG_LEN, LEG_W), pants_mat, "LegR")
-	var shoe_mat := Ink.mat(Ink.INK.lerp(pants, 0.25))
-	_box(leg_l, Vector3(LEG_W + 0.02, 0.10, LEG_W + 0.10),
-		Vector3(0, -LEG_LEN + 0.05, -0.03), shoe_mat, "ShoeL")
-	_box(leg_r, Vector3(LEG_W + 0.02, 0.10, LEG_W + 0.10),
-		Vector3(0, -LEG_LEN + 0.05, -0.03), shoe_mat, "ShoeR")
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	return mi
 
 
 func _box(parent: Node3D, size: Vector3, offset: Vector3, mat: Material, n: String) -> MeshInstance3D:
@@ -137,14 +152,15 @@ func _box(parent: Node3D, size: Vector3, offset: Vector3, mat: Material, n: Stri
 	return mi
 
 
-## A limb pivot at [param at], with the box hanging below it so rotation.x swings
-## from the joint rather than the middle.
-func _limb(parent: Node3D, at: Vector3, size: Vector3, mat: Material, n: String) -> Node3D:
+## A limb pivot at [param at], with the drawn strip hanging below it so
+## rotation.x swings from the joint rather than the middle. The same drawing is
+## on both faces: a sleeve is a sleeve from behind.
+func _limb(parent: Node3D, at: Vector3, size: Vector2, slab_mat: Material, drawing: Material, n: String) -> Node3D:
 	var pivot := Node3D.new()
 	pivot.name = n
 	pivot.position = at
 	parent.add_child(pivot)
-	_box(pivot, size, Vector3(0, -size.y * 0.5, 0), mat, n + "Box")
+	_paper_part(pivot, size, Vector3(0, -size.y * 0.5, 0), slab_mat, drawing, drawing, n + "Box")
 	return pivot
 
 

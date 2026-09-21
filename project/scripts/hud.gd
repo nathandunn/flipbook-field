@@ -166,11 +166,13 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var vp := get_viewport_rect().size
 
-	# Panel behind the status block.
-	var top := Rect2(Vector2(12, 8), Vector2(
-		maxf(maxf(_score_label.size.x, _props_label.size.x), _demand_label.size.x) + 32, 110))
-	draw_rect(top, Color(0.98, 0.96, 0.90, 0.82), true)
-	draw_rect(top, INK, false, 3.0)
+	# Panel behind the status block. Nothing to say yet (the setup screen is
+	# up), nothing to draw.
+	if _round_label.text != "":
+		var top := Rect2(Vector2(12, 8), Vector2(
+			maxf(maxf(_score_label.size.x, _props_label.size.x), _demand_label.size.x) + 32, 110))
+		draw_rect(top, Color(0.98, 0.96, 0.90, 0.82), true)
+		draw_rect(top, INK, false, 3.0)
 
 	# Action pips: one ink-outlined square per action, filled while unspent.
 	var pip := 22.0

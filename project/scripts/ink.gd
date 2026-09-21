@@ -68,6 +68,34 @@ static func face_mat(index: int) -> StandardMaterial3D:
 	return m
 
 
+## The back of a head: inferred from the front by art/bodygen.py.
+static func back_mat(index: int) -> StandardMaterial3D:
+	return _paper("res://faces/back_%02d.png" % posmod(index, FACE_COUNT))
+
+
+## A costume part, drawn in pen by art/bodygen.py. [param part] is one of
+## torso_f, torso_b, arm, leg; [param role_key] is Arch.ROLE_KEY[role].
+static func body_mat(role_key: String, part: String) -> StandardMaterial3D:
+	return _paper("res://bodies/%s_%s.png" % [role_key, part])
+
+
+static var _paper_cache: Dictionary = {}
+
+## Unlit, scissored, two-sided: a drawing on paper, same as the faces.
+static func _paper(path: String) -> StandardMaterial3D:
+	if _paper_cache.has(path):
+		return _paper_cache[path]
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = load(path)
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
+	m.alpha_scissor_threshold = 0.5
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_paper_cache[path] = m
+	return m
+
+
 # --- Scene palette -----------------------------------------------------------
 # Warm paper, cool shadows, desaturated fills. Nothing fully saturated: printed
 # colour never is, and it's what keeps the ink lines reading as the darkest thing

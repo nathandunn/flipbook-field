@@ -24,6 +24,36 @@ Open `project/` in Godot 4.4 (Forward+) and press F5.
 On a phone: left thumb drags a floating stick to walk, the right side drags to
 look, and the **TALK** button acts.
 
+## Who you are
+
+The match opens on a setup screen: pick a **job**, spend four points on four
+**stats**, and take up to four **colleagues** with you. The nemesis is dealt a
+job, the same points, and as many colleagues as you took.
+
+A job is a costume, a taste, and a rule. The rule belongs to whichever side has
+one of that job clapping for it — so buying their IT person unlocks their
+projector, and losing your Legal puts your hand back on the table.
+
+| Job | wants | rule while one is on your side |
+|---|---|---|
+| **CEO** | Data / Story | one more seat on the grass at your talks |
+| **Engineer** | Data / Gadget | Data and Gadget slides land one extra clap per fan |
+| **IT** | Gadget | your projector cannot be rigged |
+| **HR** | Story | their bullies are turned away at the door |
+| **Marketing** | Story / Gadget | your rumours cool twice as hard |
+| **Sales** | Snacks / Gadget | buy from further away; the stream closes three |
+| **Legal** | Data | your cards cannot be pinched |
+| **Intern** | Snacks | desks warm one more neutral; interns can be bought with any card |
+
+Everybody on the grass has a job too, drawn from the usual office mix (lots of
+interns, one CEO at most), so who you court is a decision: the engineer by the
+stream is worth more to you than the intern if you present Data.
+
+**Stats** — Charm: claps from your slides, +12% a point. Guile: rumours cool
+harder and your tricks are worth more. Hustle: buy from further away, walk
+faster. Grit: boo pressure at your talk −4 a point, and an ignored heckle costs
+less. Each job starts somewhere on these; the four free points are yours.
+
 ## The match, as a board game
 
 The first version played like two games of solitaire compared at the end: four
@@ -119,12 +149,26 @@ Neutrals are the currency. Everything else is a pump or a drain on them.
 Everyone wears a floating pip: colour is allegiance, shape and height are
 archetype. Cold neutrals have a small pale pip that grows as they warm up.
 
-## Faces
+## Faces, and the rest of the body
 
-Heads are paper cards carrying Nathan's pen drawings — four originals and sixteen
-synthesised variants, generated at build time from an 8 KB blob by
-`art/facegen.py`. Face 0 is the player, face 1 the nemesis, the rest are dealt
-from a shuffled deck so no two people in a match share a face.
+Every figure is a paper doll: each part is a slim slab with a drawing on its
+front and another on its back, so a costume reads from any side and the walk
+still swings at the joints.
+
+Heads carry Nathan's pen drawings — four originals and sixteen synthesised
+variants from `art/facegen.py`. Face 0 is the player, face 1 the nemesis, the
+rest are dealt from a shuffled deck so no two people in a match share a face.
+The **back of each head is inferred** from its front by `art/bodygen.py`: the
+silhouette mirrored, the hair kept (the ink outside the middle of the head,
+where the features are), the face dropped, the crown hatched.
+
+Bodies are drawn by `art/bodygen.py` in the same idiom — one pen, paper white,
+a wobble in every line — one costume per job, front and back: the CEO's hatched
+suit and tie, the engineer's plaid, IT's hoodie, lanyard and pouch (hood hanging
+on the back), HR's blazer and badge, marketing's turtleneck and scarf, sales'
+rolled sleeves, loosened tie and phone, legal's waistcoat, bow tie and
+pinstripes, the intern's sticker and backpack. `build.sh` regenerates all of it
+before the import step; nothing is hand-placed.
 
 ## Playability, measured
 
@@ -135,11 +179,11 @@ after the redesign:
 
 | | greedy vs nemesis | random vs nemesis |
 |---|---|---|
-| wins / ties / losses | 6 / 4 / 6 (16 matches) | 1 / 0 / 7 |
-| mean margin | 1.8 people | 3.5 people |
-| lead changes per match | 0.75 | 0.4 |
-| decisions per match | ~27 | ~23 |
-| cards blocked by the other side | 17% | 16% |
+| wins / ties / losses | 14 / 9 / 9 (32 matches, random jobs and parties) | 1 / 0 / 11 |
+| mean margin | 1.5 people | 4.9 people |
+| lead changes per match | 0.6 | 0.25 |
+| decisions per match | ~26 | ~22 |
+| cards blocked by the other side | 19% | 21% |
 
 Which is what a fair two-player game looks like from the outside: level against
 an equal, punished for playing at random, and the lead moving during the match.
@@ -160,8 +204,10 @@ the underdog seat. Nothing about balance lives in behaviour code.
   the player's cards and the nemesis's choice, so the AI can never do something
   you could not), the verbs, the talks, scoring.
 - `scripts/presentation.gd` — the talk, the hecklers, the scoreboards.
-- `scripts/person.gd` — one figure: archetype, curiosity and who it is for,
-  walking. `warm_rule` is the tug of war, as a pure function.
+- `scripts/person.gd` — one figure: archetype, job, curiosity and who it is
+  for, walking. `warm_rule` is the tug of war, as a pure function.
+- `scripts/setup.gd` — the job / stats / party screen. Pure UI.
+- `scripts/block_figure.gd` — the paper doll. `art/bodygen.py` draws what it wears.
 - `materials/toon_base.tres` — restyles the whole scene at once.
 
 The nemesis in `_nemesis_choose` takes the biggest number on the board, plus a

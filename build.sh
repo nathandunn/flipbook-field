@@ -5,6 +5,8 @@ set -euo pipefail
 GODOT="${1:-godot4}"
 cd "$(dirname "$0")"
 rm -rf web && mkdir -p web
+# Costumes and the backs of heads are drawn, not stored: one pen, at build time.
+python3 art/bodygen.py project/faces project/bodies
 # New scripts with a class_name are only registered by an import pass;
 # without this a fresh clone cannot resolve them and the export fails.
 "$GODOT" --headless --path project --import

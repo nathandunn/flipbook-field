@@ -85,6 +85,34 @@ func _process(_d: float) -> bool:
 
 	var pl = g.planner
 	var tu = g.talk_ui
+
+	# --- the setup screen: a job, four points, a party ----------------------
+	var su = g.get("setup")
+	if su != null and su.visible:
+		var btns: Array = []
+		_buttons(su._box, btns)
+		if btns.is_empty():
+			return false
+		match int(su._page):
+			0:
+				_click(btns[rngd.randi() % btns.size()])
+			1:
+				for b in btns:
+					if (b as Button).text.begins_with("Done"):
+						_click(b)
+						return false
+				_click(btns[rngd.randi() % 4])
+			2:
+				var want: int = int(OS.get_environment("PARTY")) if OS.get_environment("PARTY") != "" else 4
+				if su.party.size() >= want:
+					for b in btns:
+						if (b as Button).text.begins_with("Begin"):
+							_click(b)
+							print("SETUP role=%s stats=%s party=%s" % [Arch.ROLE_NAME[su.role], str(su.stats), str(su.party)])
+							return false
+				_click(btns[rngd.randi() % 8])
+		return false
+
 	if g.phase == 2 and last_phase != 2:
 		var vals: Array = []
 		for o in g._options_for(Arch.Side.NEMESIS):
