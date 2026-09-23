@@ -156,6 +156,18 @@ func warm(amount: float, by: int = Arch.Side.NONE) -> void:
 	refresh()
 
 
+## Talk somebody down: their interest drops, and at nothing they are nobody's.
+## Unlike [method warm] it never carries over to the side doing the talking -
+## a rumour cools, it does not recruit.
+func cool(amount: float) -> void:
+	if kind != Arch.Kind.NEUTRAL:
+		return
+	curiosity = maxf(curiosity - amount, 0.0)
+	if curiosity <= 0.0:
+		curious_for = Arch.Side.NONE
+	refresh()
+
+
 ## The arithmetic of warming, as a pure function so a card can show exactly
 ## what a visit would do. Interest is a tug of war: the other side's warmth is
 ## worn down first, and only once it is gone does the neutral start on you.

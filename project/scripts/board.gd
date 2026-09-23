@@ -4,7 +4,7 @@
 ## edge with a cost in steps. A move is "walk up to N steps, then act where you
 ## stand", so where you are is finally a decision: the Rock is two steps from
 ## the Lobby and four from the Data desk, and a room the other side is standing
-## in cannot be entered or walked through. Pure data plus Dijkstra; the 3D
+## in cannot be entered and costs a step more to pass. Pure data plus Dijkstra; the 3D
 ## office is the picture of this graph, not the other way round.
 class_name Board
 extends RefCounted
@@ -63,8 +63,9 @@ func _edge(a: String, b: String, cost: int) -> void:
 
 
 ## Shortest path costs from [param from] to every room, never entering a room
-## in [param blocked]. Returns id -> steps.
-func distances(from: String, blocked: Array = []) -> Dictionary:
+## in [param blocked], and paying one step extra to enter a room in
+## [param toll] (squeezing past somebody standing there). Returns id -> steps.
+func distances(from: String, blocked: Array = [], toll: Array = []) -> Dictionary:
 	var dist := {from: 0}
 	var open: Array = [from]
 	while not open.is_empty():
@@ -79,7 +80,7 @@ func distances(from: String, blocked: Array = []) -> Dictionary:
 			var v: String = e[0]
 			if blocked.has(v):
 				continue
-			var nd: int = dist[u] + int(e[1])
+			var nd: int = dist[u] + int(e[1]) + (1 if toll.has(v) else 0)
 			if not dist.has(v) or nd < dist[v]:
 				dist[v] = nd
 				if not open.has(v):
@@ -87,15 +88,15 @@ func distances(from: String, blocked: Array = []) -> Dictionary:
 	return dist
 
 
-func dist(from: String, to: String, blocked: Array = []) -> int:
-	var d := distances(from, blocked)
+func dist(from: String, to: String, blocked: Array = [], toll: Array = []) -> int:
+	var d := distances(from, blocked, toll)
 	return int(d[to]) if d.has(to) else 999
 
 
 ## The rooms on the shortest walk from [param from] to [param to], excluding
 ## [param from], including [param to]. Empty if unreachable.
-func path(from: String, to: String, blocked: Array = []) -> Array:
-	var d := distances(from, blocked)
+func path(from: String, to: String, blocked: Array = [], toll: Array = []) -> Array:
+	var d := distances(from, blocked, toll)
 	if not d.has(to):
 		return []
 	# Walk back from the target along strictly decreasing distances.
@@ -105,7 +106,7 @@ func path(from: String, to: String, blocked: Array = []) -> Array:
 		var found := false
 		for e in _adj[cur]:
 			var v: String = e[0]
-			if d.has(v) and d[v] + int(e[1]) == d[cur] and not blocked.has(v):
+			if d.has(v) and d[v] + int(e[1]) + (1 if toll.has(cur) else 0) == d[cur] and not blocked.has(v):
 				out.push_front(v)
 				cur = v
 				found = true

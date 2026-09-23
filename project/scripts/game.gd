@@ -272,13 +272,13 @@ func _steps(side: int) -> int:
 
 
 ## Rooms this side can reach this move, and at what cost. The other side's
-## room cannot be entered or walked through: standing in a doorway is a move.
+## room cannot be entered, and passing through it costs a step more.
 func _reach(side: int) -> Dictionary:
 	return _reach_from(side, pos[side])
 
 
 func _reach_from(side: int, here: String, steps: int = -1) -> Dictionary:
-	var d := board.distances(here, _blocked_for(side))
+	var d := board.distances(here, _blocked_for(side), _toll_for(side))
 	var lim := _steps(side) if steps < 0 else steps
 	var out := {}
 	for id in d:
@@ -287,14 +287,22 @@ func _reach_from(side: int, here: String, steps: int = -1) -> Dictionary:
 	return out
 
 
-## Rooms this side cannot enter or walk through: where the other presenter
-## stands, and any room the other side's IT has walled off.
+## Rooms this side cannot enter or walk through: any room the other side's
+## IT has walled off.
 func _blocked_for(side: int) -> Array:
-	var out: Array = [pos[_other(side)]]
+	var out: Array = []
 	for w in firewalls:
 		if int(w["owner"]) != side and not out.has(w["room"]):
 			out.append(w["room"])
 	return out
+
+
+## Rooms that cost a step more to walk through: where the other presenter is
+## standing. You cannot stop there, but you can squeeze past. (It used to be a
+## wall; once colleagues could move instead, a presenter parked in the Lobby
+## sealed the Break room off from every desk for a whole match.)
+func _toll_for(side: int) -> Array:
+	return [pos[_other(side)]]
 
 
 func _walled_against(side: int, room: String) -> bool:
@@ -333,9 +341,9 @@ func _gate(side: int, opt: Dictionary, reach: Dictionary, here: String) -> Dicti
 		opt["enabled"] = false
 		opt["why"] = "their IT has firewalled the %s" % board.room_name(room)
 	elif not reach.has(room):
-		var far := board.dist(here, room, _blocked_for(side))
+		var far := board.dist(here, room, _blocked_for(side), _toll_for(side))
 		opt["enabled"] = false
-		opt["why"] = ("%d steps away, you have %d" % [far, _steps(side)]) if far < 999 else "no way through - they are in the doorway"
+		opt["why"] = ("%d steps away, you have %d" % [far, _steps(side)]) if far < 999 else "no way through - walled off"
 	else:
 		opt["sub"] = str(opt["sub"]) + ("  ·  %d step%s" % [reach[room], "" if reach[room] == 1 else "s"] if reach[room] > 0 else "  ·  here")
 	return opt
@@ -571,6 +579,7 @@ func _options_for(side: int, from_room: String = "", lookahead: bool = true, wit
 	var demand := _demand(side)
 	var opts: Array = []
 	var here: String = pos[side] if from_room == "" else from_room
+	var need := _card_need(side)
 
 	for i in range(office.desk_points.size()):
 		var taste: int = office.desk_tastes[i]
@@ -588,7 +597,7 @@ func _options_for(side: int, from_room: String = "", lookahead: bool = true, wit
 			"label": "%s desk" % Arch.TASTE_NAME[taste],
 			"sub": sub,
 			"enabled": occupied[other] != id, "why": "your nemesis is there",
-			"value": float(demand[taste]) + 1.1 * float(warm[0]) + 0.7 * float(warm[1]),
+			"value": float(demand[taste]) + 1.1 * float(warm[0]) + 0.7 * float(warm[1]) + need,
 		})
 
 	var curious := 0
@@ -665,23 +674,29 @@ func _options_for(side: int, from_room: String = "", lookahead: bool = true, wit
 			"sub": "take it out of their hand and into yours  ·  they hold %d" % their_hand.size(),
 			"enabled": occupied[other] != id and not legal,
 			"why": "their Legal has the desk locked" if legal else "your nemesis is standing there",
-			"value": 2.6 + 0.4 * float(their_hand.size()) + (0.8 if demand[taste] >= 2 else 0.0) + 0.3 * _stat(side, 1),
+			"value": 2.6 + 0.4 * float(their_hand.size()) + (0.8 if demand[taste] >= 2 else 0.0) + 0.3 * _stat(side, 1) + need,
 		})
 		pinch_rows += 1
 
 	# A rumour: cool everybody near the stream who was warming to them.
 	var theirs_near := 0
+	# What the rumour actually takes off them: nobody cools below nothing, so a
+	# big chill on a lukewarm crowd is worth what they had, not what it could
+	# have taken. (Uncapped, a Marketing nemesis with guile valued a rumour at
+	# 25 and spent whole rounds at the water with an empty hand.)
+	var cooled := 0.0
 	for p in people:
 		if p.kind == Arch.Kind.NEUTRAL and p.curious_for == other and p.curiosity > 0.0 \
 				and p.global_position.distance_to(office.stream_point) <= Arch.STREAM_RADIUS:
 			theirs_near += 1
+			cooled += minf(_chill(side) * (2.0 if _has(other, Arch.Role.MARKETING) else 1.0), p.curiosity)
 	if theirs_near > 0:
 		opts.append({
 			"id": "rumour", "kind": "rumour", "station": "stream", "pos": office.stream_point,
 			"label": "Spread a rumour",
 			"sub": "%d by the water were warming to them; cools each by %.1f" % [theirs_near, _chill(side)],
 			"enabled": occupied[other] != "stream", "why": "your nemesis is there",
-			"value": 1.1 * float(theirs_near) * (_chill(side) / Arch.RUMOUR_CHILL),
+			"value": 1.1 * cooled / Arch.RUMOUR_CHILL,
 		})
 
 	# Rig the projector: their best slide comes up blank, unless they check it.
@@ -757,6 +772,17 @@ func _options_for(side: int, from_room: String = "", lookahead: bool = true, wit
 				o["value"] = float(o["value"]) + stay
 			opts.append(o)
 	return opts
+
+
+## What one more card in hand is worth on top of what it does: a talk needs
+## slides. Nothing once the hand can fill a talk; a little while it cannot;
+## a lot when there are no longer enough moves left to fill it.
+func _card_need(side: int) -> float:
+	var need: int = Arch.SLIDES_PER_TALK - satchel[side].size()
+	if need <= 0:
+		return 0.0
+	var left: int = Arch.MOVES_PER_ROUND - move_no + 1
+	return 1.0 + (1.5 if left <= need else 0.0)
 
 
 ## The best immediate value available next move from [param room].
@@ -899,7 +925,7 @@ func _execute(side: int, opt: Dictionary) -> void:
 	if opt.has("unit"):
 		await _execute_unit(side, opt)
 		return
-	var route: Array = board.path(pos[side], room, _blocked_for(side))
+	var route: Array = board.path(pos[side], room, _blocked_for(side), _toll_for(side))
 	if side == Arch.Side.PLAYER:
 		for i in range(route.size()):
 			planner.running(i + 1, route.size(), "%s…" % opt["label"])
@@ -1196,7 +1222,7 @@ func _ability_at(side: int, u: Person, room: String, their_best: Dictionary) -> 
 			if taste < 0:
 				return {}
 			var d := _demand(side)
-			return {"value": float(d[taste]) + 0.8, "sub": "takes a %s card  ·  %d in the room want it" % [Arch.TASTE_NAME[taste], d[taste]]}
+			return {"value": float(d[taste]) + 0.8 + _card_need(side), "sub": "takes a %s card  ·  %d in the room want it" % [Arch.TASTE_NAME[taste], d[taste]]}
 		Arch.Role.IT:
 			var v: float = 0.6 * float(their_best.get(room, 0.0))
 			for w in firewalls:
@@ -1268,7 +1294,7 @@ func _smear_targets(side: int, room: String) -> Array[Person]:
 func _execute_unit(side: int, opt: Dictionary) -> void:
 	var u: Person = opt["unit"]
 	var room: String = opt["station"]
-	var route: Array = board.path(u.room, room, _blocked_for(side)) if u.room != room else []
+	var route: Array = board.path(u.room, room, _blocked_for(side), _toll_for(side)) if u.room != room else []
 	for i in range(route.size()):
 		if side == Arch.Side.PLAYER:
 			planner.running(i + 1, route.size(), "%s…" % opt["label"])
@@ -1418,7 +1444,7 @@ func _act_rumour(side: int) -> void:
 	for p in people:
 		if p.kind == Arch.Kind.NEUTRAL and p.curious_for == other and p.curiosity > 0.0 \
 				and p.global_position.distance_to(office.stream_point) <= Arch.STREAM_RADIUS:
-			p.warm(_chill(side) * (2.0 if _has(other, Arch.Role.MARKETING) else 1.0), side)
+			p.cool(_chill(side) * (2.0 if _has(other, Arch.Role.MARKETING) else 1.0))
 			cooled += 1
 	if side == Arch.Side.PLAYER:
 		hud.toast("A word by the water. %d went cold on them." % cooled)

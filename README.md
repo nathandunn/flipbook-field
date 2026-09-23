@@ -63,7 +63,10 @@ The office is a Clue board: rooms joined by corridors, drawn in the top-right
 corner. A move is **walk up to N steps, then act where you stand**. Two steps
 a move, plus one for every two points of Hustle. The Rock is two steps from
 the Lobby and four from the Data desk; a room the other side is standing in
-cannot be entered *or walked through*, so standing in a doorway is a move.
+cannot be entered, and squeezing past them through it costs a step more, so
+standing in a doorway is a move. (It used to be a wall; with colleagues doing
+the moving, a presenter parked in the Lobby could seal the Break room off from
+every desk for a whole match.) An IT firewall *is* a wall, for two moves.
 Every card says how many steps it costs, and the ones out of reach say how
 far they are. The Lobby is a pure move — no action, one step from everything.
 
