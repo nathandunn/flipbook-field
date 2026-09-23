@@ -35,7 +35,7 @@ The match opens on three pages:
 | **HR** | Story | their bullies are turned away | you cannot send hecklers |
 | **Marketing** | Story / Gadget | your rumours cool twice as hard | their rumours hit you twice as hard |
 | **Sales** | Snacks / Gadget | buy from further away; the stream closes three | Data lands −1 clap per fan |
-| **Legal** | Data | your cards cannot be pinched | one step less a move |
+| **Legal** | Data | your cards cannot be pinched | your colleagues walk one step a move, not two |
 | **Intern** | Snacks | desks warm one more neutral | an intern can be bought with any card |
 
 Because a rule belongs to whoever has that job on their side, buying their IT

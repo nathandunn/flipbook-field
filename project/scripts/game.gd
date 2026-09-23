@@ -268,7 +268,7 @@ func _place_for_round() -> void:
 
 ## Steps a side may walk in one move. Hustle is legs.
 func _steps(side: int) -> int:
-	return maxi(1, 2 + _stat(side, 2) / 2 - (1 if _has(side, Arch.Role.LEGAL) else 0))
+	return 2 + _stat(side, 2) / 2
 
 
 ## Rooms this side can reach this move, and at what cost. The other side's
@@ -1129,6 +1129,11 @@ func _park(p: Person, room: String) -> void:
 	p.goto(p.home_pos)
 
 
+## How far a colleague walks in a move. Legal's downside: sign-off slows them.
+func _unit_steps(side: int) -> int:
+	return Arch.UNIT_STEPS - (1 if _has(side, Arch.Role.LEGAL) else 0)
+
+
 func _ability_name(role: int) -> String:
 	return str(Arch.ABILITY[role][0])
 
@@ -1164,7 +1169,7 @@ func _unit_options(side: int) -> Array:
 			out.append(card)
 			continue
 		var here := u.room if u.room != "" else String(pos[side])
-		var reach := _reach_from(side, here, 0 if u.role == Arch.Role.HR else Arch.UNIT_STEPS)
+		var reach := _reach_from(side, here, 0 if u.role == Arch.Role.HR else _unit_steps(side))
 		var best := {}
 		for room in reach:
 			if _walled_against(side, room) or room == pos[other]:
@@ -1177,7 +1182,7 @@ func _unit_options(side: int) -> Array:
 				best["room"] = room
 				best["steps"] = int(reach[room])
 		if best.is_empty():
-			card["why"] = "nothing for %s to do within %d steps" % [name, Arch.UNIT_STEPS]
+			card["why"] = "nothing for %s to do within %d step%s" % [name, _unit_steps(side), "" if _unit_steps(side) == 1 else "s"]
 			out.append(card)
 			continue
 		var room: String = best["room"]

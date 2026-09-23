@@ -183,7 +183,7 @@ const ROLE_DOWNSIDE := {
 	Role.HR: "you cannot send hecklers",
 	Role.MARKETING: "their rumours hit you twice as hard too",
 	Role.SALES: "Data slides land one clap less per fan",
-	Role.LEGAL: "one step less a move - everything needs sign-off",
+	Role.LEGAL: "your colleagues walk one step, not two - everything needs sign-off",
 	Role.INTERN: "an intern can be bought with any card",
 	Role.STAFF: "none",
 }
@@ -199,7 +199,7 @@ const DOWN_SHORT := {
 	Role.CEO: "bullies take 2", Role.ENGINEER: "-1 clap Story",
 	Role.IT: "can't rig", Role.HR: "can't send hecklers",
 	Role.MARKETING: "their rumours x2", Role.SALES: "-1 clap Data",
-	Role.LEGAL: "-1 step", Role.INTERN: "buyable with any card",
+	Role.LEGAL: "colleagues walk 1", Role.INTERN: "buyable with any card",
 	Role.STAFF: "",
 }
 ## Where a job starts on the four stats, before free points: charm, guile,
