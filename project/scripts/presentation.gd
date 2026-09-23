@@ -140,8 +140,10 @@ func _on_slide_picked(i: int) -> void:
 
 
 func _ask_heckle() -> void:
-	_title.text = "Heckler!"
-	_sub.text = "Someone at the back is holding a fistful of pinecones."
+	var h := _a_heckler()
+	_title.text = "Heckler: %s" % (h.person_name if h else "someone")
+	_sub.text = ("%s, %s for your nemesis, is on their feet with a fistful of pinecones." % [
+		h.person_name, Arch.ROLE_NAME[h.role]]) if h else "Someone at the back is holding a fistful of pinecones."
 	_refresh_tally()
 	_clear_buttons()
 
@@ -238,6 +240,17 @@ func _wanting(taste: int) -> int:
 	return n
 
 
+## One of the people booing, for naming. The bully first: they are the loud one.
+func _a_heckler() -> Person:
+	var any: Person = null
+	for p in _audience:
+		if p.kind == Arch.Kind.BULLY:
+			return p
+		if Arch.boos(p.kind) and any == null:
+			any = p
+	return any
+
+
 func _hecklers() -> int:
 	var n := 0
 	for p in _audience:
@@ -259,6 +272,11 @@ func _score_slide(taste: int) -> Array:
 			if p.taste == taste and bool(_mods.get("engineer", false)) \
 					and (taste == Arch.Taste.DATA or taste == Arch.Taste.GADGET):
 				claps += 1.0
+			# The downsides: an engineer groans at a story, sales at a spreadsheet.
+			if p.taste == taste and taste == Arch.Taste.STORY and bool(_mods.get("story_minus", false)):
+				claps -= 1.0
+			if p.taste == taste and taste == Arch.Taste.DATA and bool(_mods.get("data_minus", false)):
+				claps -= 1.0
 		# Wage slaves attend and say nothing. That is the joke and the mechanic:
 		# they are crowd size, which is what draws spectators, and nothing else.
 	for p in _spectators:
@@ -331,9 +349,11 @@ func _wrap_up() -> void:
 	# are for.
 	for p in _audience:
 		if p.kind == Arch.Kind.BULLY:
-			var victim := _pick_flippable()
-			if victim and not lost.has(victim):
-				lost.append(victim)
+			# A CEO on the stage draws a bigger bully: two go, not one.
+			for k in range(int(_mods.get("bully_takes", 1))):
+				var victim := _pick_flippable()
+				if victim and not lost.has(victim):
+					lost.append(victim)
 			break
 
 	if _lost_follower and not lost.has(_lost_follower):

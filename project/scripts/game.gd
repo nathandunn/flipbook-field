@@ -45,8 +45,6 @@ const NEMESIS_SPEEDUP := 3.0
 ## wear the same face.
 const NEMESIS_FACE := 1
 
-## The player, in manual mode, finished a move at a station.
-signal manual_done
 
 var rng := RandomNumberGenerator.new()
 var office: Office
@@ -99,6 +97,9 @@ var setup: Setup
 ## presenter is standing on it. A move is "walk up to N steps, then act".
 var board: Board
 var floor_plan: FloorPlan
+var roster: Roster
+## Set once the setup screen is done and the match is on the board.
+var _started: bool = false
 var pos := {Arch.Side.PLAYER: "lobby", Arch.Side.NEMESIS: "break"}
 ## A coin at the start of the match decides who opens by the Stream; it
 ## swaps every round, so over three rounds one side gets it twice.
@@ -108,10 +109,6 @@ var _start_flip: bool = false
 var roles := {Arch.Side.PLAYER: Arch.Role.STAFF, Arch.Side.NEMESIS: Arch.Role.STAFF}
 var stats := {Arch.Side.PLAYER: [1, 1, 1, 1], Arch.Side.NEMESIS: [1, 1, 1, 1]}
 var parties := {Arch.Side.PLAYER: [], Arch.Side.NEMESIS: []}
-## True while a move is being walked. Cleared by "Take over".
-var _auto: bool = false
-## True while waiting for the player to walk to a station and press E.
-var _awaiting_manual: bool = false
 
 
 func _ready() -> void:
@@ -141,8 +138,6 @@ func _ready() -> void:
 	planner = Planner.new()
 	planner.name = "Planner"
 	$UI.add_child(planner)
-	planner.manual.connect(_on_manual)
-	planner.took_over.connect(_on_took_over)
 
 	setup = Setup.new()
 	setup.name = "Setup"
@@ -154,9 +149,14 @@ func _ready() -> void:
 	floor_plan.board = board
 	$UI.add_child(floor_plan)
 
-	hud.set_hint(
-		"Pick a card each move, or Play it myself · WASD move · Shift run · E act · Esc free mouse"
-	)
+	roster = Roster.new()
+	roster.name = "Roster"
+	roster.game = self
+	$UI.add_child(roster)
+	planner.left_margin = Roster.W + 12.0
+	planner.top_margin = FloorPlan.H + 16.0
+
+	hud.set_hint("Pick a card each move · the board is top right · who is on each side is on the left")
 	_start()
 
 
@@ -167,6 +167,7 @@ func _start() -> void:
 	setup.open()
 	var cfg: Dictionary = await setup.done
 	_apply_setup(cfg)
+	_started = true
 	_begin_round()
 
 
@@ -194,9 +195,12 @@ func _apply_setup(cfg: Dictionary) -> void:
 		ns[k] = int(ns[k]) + 1
 	stats[Arch.Side.NEMESIS] = ns
 	nemesis.dress(nr)
+	# Four others, one of each job, never its own - the same rule as yours.
+	var pool: Array = Arch.PLAYABLE.duplicate()
+	pool.erase(nr)
 	var np: Array = []
-	for i in range(parties[Arch.Side.PLAYER].size()):
-		np.append(Arch.PLAYABLE[rng.randi() % Arch.PLAYABLE.size()])
+	while np.size() < Arch.PARTY_SIZE and not pool.is_empty():
+		np.append(pool.pop_at(rng.randi() % pool.size()))
 	parties[Arch.Side.NEMESIS] = np
 
 	_spawn_parties()
@@ -207,8 +211,8 @@ func _apply_setup(cfg: Dictionary) -> void:
 	var mine: Array[String] = []
 	for r in parties[Arch.Side.PLAYER]:
 		mine.append(Arch.ROLE_NAME[r])
-	hud.set_hint("You: %s · party: %s · nemesis: %s · pick a card each move, or Play it myself" % [
-		Arch.ROLE_NAME[roles[Arch.Side.PLAYER]], ", ".join(mine), Arch.ROLE_NAME[nr]])
+	hud.set_hint("You: %s with %s  ·  Nemesis: %s with %s  ·  pick a card each move" % [
+		Arch.ROLE_NAME[roles[Arch.Side.PLAYER]], ", ".join(mine), Arch.ROLE_NAME[nr], ", ".join(names)])
 
 
 ## The colleagues each side starts with, standing near their own end.
@@ -225,10 +229,13 @@ func _spawn_parties() -> void:
 			Office.BREAK_POS + Vector3(cos(a) * 3.5, 0, sin(a) * 3.0), int(nq[i]))
 
 
-## Does this side have one of these jobs clapping for it? That is the whole
-## test for a class rule, so buying their IT person switches it off for them
-## and on for you.
+## Is this job on this side - the presenter themselves, or anyone of it
+## clapping for them? That is the whole test for a class's upside and its
+## downside, so buying their IT person switches both off for them and on for
+## you.
 func _has(side: int, role: int) -> bool:
+	if roles[side] == role:
+		return true
 	for p in people:
 		if p.side == side and p.role == role and Arch.claps(p.kind):
 			return true
@@ -254,7 +261,7 @@ func _place_for_round() -> void:
 
 ## Steps a side may walk in one move. Hustle is legs.
 func _steps(side: int) -> int:
-	return 2 + _stat(side, 2) / 2
+	return maxi(1, 2 + _stat(side, 2) / 2 - (1 if _has(side, Arch.Role.LEGAL) else 0))
 
 
 ## Rooms this side can reach this move, and at what cost. The other side's
@@ -343,11 +350,13 @@ func _spawn_people() -> void:
 	# Both sides open with the same pieces. A hater is a piece you cannot clap
 	# with but can send to the other side's talk, which is what makes it worth
 	# having and worth guarding against.
+	# Staff by job: a heckler has no rule to lend, only a voice. They are named
+	# on the roster under the side that sent them.
 	for i in range(starting_haters):
 		_add_person(Arch.Kind.HATER, Arch.Side.NEMESIS,
-			Office.BREAK_POS + Vector3(rng.randf_range(-5, 5), 0, rng.randf_range(-5, 5)))
+			Office.BREAK_POS + Vector3(rng.randf_range(-5, 5), 0, rng.randf_range(-5, 5)), Arch.Role.STAFF)
 		_add_person(Arch.Kind.HATER, Arch.Side.PLAYER,
-			Office.DESK_CLUSTER + Vector3(rng.randf_range(-5, 5), 0, rng.randf_range(-5, 5) + 4.0))
+			Office.DESK_CLUSTER + Vector3(rng.randf_range(-5, 5), 0, rng.randf_range(-5, 5) + 4.0), Arch.Role.STAFF)
 
 	# The contested pool. Scattered wide on purpose: reaching them costs walking,
 	# which is what makes the move budget bite.
@@ -374,7 +383,6 @@ func _spawn_player() -> void:
 	player = PLAYER_SCENE.instantiate()
 	add_child(player)
 	player.global_position = Vector3(0, 0.2, 4.0)
-	player.interact_pressed.connect(_on_interact)
 	dialogue.camera = player.camera
 	touch.player = player
 
@@ -489,29 +497,12 @@ func _demand(side: int) -> Dictionary:
 func _process(_delta: float) -> void:
 	if player == null:
 		return
-
-	var free_to_walk := _awaiting_manual and not _busy
-	player.input_locked = not free_to_walk
-	touch.enabled = free_to_walk
-
-	if not free_to_walk:
-		hud.hide_prompt()
-		return
-
-	var st := office.station_at(player.global_position)
-	if st.is_empty():
-		hud.hide_prompt()
-		return
-
-	var verb := "TALK" if player.touch_mode else "E"
-	if st["kind"] == Office.St.ROCK:
-		hud.show_prompt("%s  —  present now" % verb)
-	elif _station_id(st) == occupied[Arch.Side.NEMESIS]:
-		hud.show_prompt("your nemesis is standing here")
-	elif not _reach(Arch.Side.PLAYER).has(_station_id(st)):
-		hud.show_prompt("%s is too far this move" % st["label"])
-	else:
-		hud.show_prompt("%s  —  %s" % [verb, st["label"]])
+	# Every move is a card; nobody walks by hand.
+	player.input_locked = true
+	touch.enabled = false
+	# The roster is the table; the talk and the round card sit on top of it.
+	roster.visible = _started and not talk_ui.visible
+	floor_plan.visible = _started and not talk_ui.visible
 
 
 # --- one move ----------------------------------------------------------------
@@ -585,17 +576,26 @@ func _options_for(side: int, from_room: String = "", lookahead: bool = true) -> 
 
 	# Turning a follower into a heckler: one point down now, for a piece that
 	# boos at every one of their talks from here on. Two of them send a bully.
+	# The card names who goes, and what that costs you.
 	var haters := 0
 	for p in people:
 		if p.side == side and p.kind == Arch.Kind.HATER:
 			haters += 1
-	if _count(side) >= 2 and haters < Arch.BULLY_FROM_HATERS:
+	var who := _heckler_pick(side)
+	if who != null and haters < Arch.BULLY_FROM_HATERS:
+		var hr := _has(side, Arch.Role.HR)
+		var loses: String = "you keep every rule" if not _rule_lost_without(side, who) \
+			else "you lose: %s" % Arch.PERK_SHORT[who.role]
 		opts.append({
 			"id": "heckler", "kind": "heckler", "station": "break", "pos": office.break_point,
-			"label": "Send a heckler",
-			"sub": "one of your followers turns sour and boos their every talk; with %d they send a bully" % Arch.BULLY_FROM_HATERS,
-			"enabled": occupied[other] != "break", "why": "your nemesis is there",
-			"value": (1.8 if _count(side) >= _count(other) + 1 else 0.6) + (0.8 if haters == Arch.BULLY_FROM_HATERS - 1 else 0.0),
+			"target": who,
+			"label": "Send %s (%s) to heckle" % [who.person_name, Arch.ROLE_NAME[who.role]],
+			"sub": "stops clapping for you, boos every talk of theirs; %s%s" % [loses,
+				"; one more and a bully goes" if haters == Arch.BULLY_FROM_HATERS - 1 else ""],
+			"enabled": occupied[other] != "break" and not hr,
+			"why": "your HR will not allow it" if hr else "your nemesis is there",
+			"value": (1.8 if _count(side) >= _count(other) + 1 else 0.6) + (0.8 if haters == Arch.BULLY_FROM_HATERS - 1 else 0.0)
+				- (1.0 if _rule_lost_without(side, who) else 0.0),
 		})
 
 	# --- sabotage -----------------------------------------------------------
@@ -648,12 +648,13 @@ func _options_for(side: int, from_room: String = "", lookahead: bool = true) -> 
 	if not rigged[other] and not _presented[other] and their_hand.size() >= 1 \
 			and move_no < Arch.MOVES_PER_ROUND:
 		var it := _has(other, Arch.Role.IT)
+		var own_it := _has(side, Arch.Role.IT)
 		opts.append({
 			"id": "rig", "kind": "rig", "station": "rock", "pos": office.rock_point,
 			"label": "Rig the projector",
 			"sub": "their best slide comes up blank at their talk - unless they spend a move to check it",
-			"enabled": occupied[other] != "rock" and not it,
-			"why": "their IT has it locked down" if it else "your nemesis is at the rock",
+			"enabled": occupied[other] != "rock" and not it and not own_it,
+			"why": "their IT has it locked down" if it else ("your IT will not touch a projector" if own_it else "your nemesis is at the rock"),
 			"value": (2.4 if their_hand.size() >= 2 else 1.0) + 0.3 * _stat(side, 1),
 		})
 	if rigged[side]:
@@ -827,101 +828,22 @@ func _player_move() -> void:
 	_refresh_plan()
 	planner.offer(round_no, move_no, Arch.MOVES_PER_ROUND, _options_for(Arch.Side.PLAYER),
 		_hand_line(Arch.Side.PLAYER))
-	var opt: Dictionary = await _await_choice()
+	var opt: Dictionary = await planner.picked
 	floor_plan.reach = {}
-	if opt.is_empty():
-		await _manual_move()
-		return
-	await _execute(Arch.Side.PLAYER, opt, true)
+	await _execute(Arch.Side.PLAYER, opt)
 
 
-## Waits for a card, or an empty dictionary if the player chose to walk.
-func _await_choice() -> Dictionary:
-	# Lambdas capture locals by value, so the flag lives in a dictionary the
-	# lambda can write through.
-	var box := {"done": false, "result": {}}
-	var on_pick := func(o: Dictionary):
-		box["result"] = o
-		box["done"] = true
-	var on_manual := func():
-		box["done"] = true
-	planner.picked.connect(on_pick, CONNECT_ONE_SHOT)
-	planner.manual.connect(on_manual, CONNECT_ONE_SHOT)
-	while not box["done"]:
-		await get_tree().process_frame
-	if planner.picked.is_connected(on_pick):
-		planner.picked.disconnect(on_pick)
-	if planner.manual.is_connected(on_manual):
-		planner.manual.disconnect(on_manual)
-	return box["result"]
-
-
-func _manual_move() -> void:
-	_busy = false
-	_awaiting_manual = true
-	hud.toast("Yours. Walk to a station and press E; the rock presents.")
-	await manual_done
-
-
-func _on_manual() -> void:
-	pass  # handled by _await_choice
-
-
-func _on_took_over() -> void:
-	_auto = false
-
-
-## Manual mode: the station you are standing at is your move.
-func _on_interact() -> void:
-	if not _awaiting_manual or _busy:
-		return
-	var st := office.station_at(player.global_position)
-	if st.is_empty():
-		return
-	var sid := _station_id(st)
-	if sid == occupied[Arch.Side.NEMESIS]:
-		hud.toast("Your nemesis is standing there.")
-		return
-	if not _reach(Arch.Side.PLAYER).has(sid):
-		hud.toast("Too far for one move: %d steps, you have %d." % [
-			board.dist(pos[Arch.Side.PLAYER], sid, [pos[Arch.Side.NEMESIS]]), _steps(Arch.Side.PLAYER)])
-		return
-	_awaiting_manual = false
-	_busy = true
-	var opt := {}
-	# By hand, a station is its plain verb; the tricks and bribes are cards.
-	for o in _options_for(Arch.Side.PLAYER):
-		if o["station"] == sid and o["kind"] in ["desk", "stream", "break", "present"]:
-			opt = o
-			break
-	if opt.is_empty():
-		# A mixed desk: no card of its own on the list, but a fine place to stand.
-		opt = {"kind": "desk", "taste": -1, "station": sid, "pos": st["pos"], "label": st["label"]}
-	await _execute(Arch.Side.PLAYER, opt, false)
-	manual_done.emit()
-
-
-## Walk to the station (if [param walk]) and do the thing.
-func _execute(side: int, opt: Dictionary, walk: bool) -> void:
+## Walk the route on the board, then do the thing.
+func _execute(side: int, opt: Dictionary) -> void:
 	_busy = true
 	var room: String = opt["station"]
 	var route: Array = board.path(pos[side], room, [pos[_other(side)]])
 	if side == Arch.Side.PLAYER:
-		if walk:
-			_auto = true
-			planner.running(1, 1, "%s…" % opt["label"])
-			for i in range(route.size()):
-				if not _auto:
-					break
-				planner.running(i + 1, route.size(), "%s…" % opt["label"])
-				await _walk_player_to(board.room_pos(route[i]))
-			planner.close()
-			if not _auto:
-				# Took over on the way: the move is theirs to finish by hand.
-				await _manual_move()
-				return
-			_auto = false
-			_snap_to(player, opt["pos"])
+		for i in range(route.size()):
+			planner.running(i + 1, route.size(), "%s…" % opt["label"])
+			await _walk_player_to(board.room_pos(route[i]))
+		planner.close()
+		_snap_to(player, opt["pos"])
 	else:
 		for r in route:
 			await _walk_to(nemesis, board.room_pos(r), 6.0)
@@ -938,7 +860,7 @@ func _execute(side: int, opt: Dictionary, walk: bool) -> void:
 		"break":
 			_act_break(side)
 		"heckler":
-			_act_heckler(side)
+			_act_heckler(side, opt.get("target"))
 		"pinch":
 			_act_pinch(side, int(opt["taste"]))
 		"rumour":
@@ -974,7 +896,7 @@ func _snap_to(who: Node3D, target: Vector3) -> void:
 func _walk_player_to(target: Vector3, max_time: float = 16.0) -> void:
 	player.auto_target = target
 	var t := 0.0
-	while t < max_time and player.auto_target != null and _auto:
+	while t < max_time and player.auto_target != null:
 		await get_tree().process_frame
 		t += get_process_delta_time()
 	player.auto_target = null
@@ -1047,20 +969,45 @@ func _act_break(side: int) -> void:
 		hud.toast("Rallied. A wage slave drifted in; your people cannot be bought this round.")
 
 
-func _act_heckler(side: int) -> void:
-	var pool: Array[Person] = []
-	for p in people:
-		if p.side == side and p.kind == Arch.Kind.FOLLOWER:
-			pool.append(p)
-	if pool.is_empty():
+func _act_heckler(side: int, target: Variant) -> void:
+	var q: Person = target as Person
+	if q == null or q.side != side or q.kind != Arch.Kind.FOLLOWER:
+		q = _heckler_pick(side)
+	if q == null:
 		return
-	var q: Person = pool[rng.randi() % pool.size()]
 	q.set_kind_side(Arch.Kind.HATER, side)
 	if side == Arch.Side.PLAYER:
-		hud.toast("%s has gone sour on your behalf." % q.person_name)
+		hud.toast("%s (%s) is off to heckle their talks." % [q.person_name, Arch.ROLE_NAME[q.role]])
 	else:
-		hud.toast("They turned %s into a heckler." % q.person_name)
+		hud.toast("They sent %s (%s) to heckle your talks." % [q.person_name, Arch.ROLE_NAME[q.role]])
 	_note_lead()
+
+
+## Who this side would send to heckle: the follower whose leaving costs the
+## least - somebody whose job is covered by someone else first.
+func _heckler_pick(side: int) -> Person:
+	var best: Person = null
+	var best_cost := INF
+	for p in people:
+		if p.side != side or p.kind != Arch.Kind.FOLLOWER:
+			continue
+		var cost := 1.0 if _rule_lost_without(side, p) else 0.0
+		if p.role == Arch.Role.STAFF:
+			cost -= 0.5
+		if cost < best_cost:
+			best_cost = cost
+			best = p
+	return best
+
+
+## Would this side lose a job's rules if [param who] stopped clapping for it?
+func _rule_lost_without(side: int, who: Person) -> bool:
+	if who.role == Arch.Role.STAFF or roles[side] == who.role:
+		return false
+	for p in people:
+		if p != who and p.side == side and p.role == who.role and Arch.claps(p.kind):
+			return false
+	return true
 
 
 # --- sabotage ----------------------------------------------------------------
@@ -1091,7 +1038,7 @@ func _act_rumour(side: int) -> void:
 	for p in people:
 		if p.kind == Arch.Kind.NEUTRAL and p.curious_for == other and p.curiosity > 0.0 \
 				and p.global_position.distance_to(office.stream_point) <= Arch.STREAM_RADIUS:
-			p.warm(_chill(side), side)
+			p.warm(_chill(side) * (2.0 if _has(other, Arch.Role.MARKETING) else 1.0), side)
 			cooled += 1
 	if side == Arch.Side.PLAYER:
 		hud.toast("A word by the water. %d went cold on them." % cooled)
@@ -1204,7 +1151,7 @@ func _nemesis_move() -> void:
 	var opt := _nemesis_choose()
 	hud.banner("THEIR MOVE — %s" % opt["label"], 1.4)
 	Engine.time_scale = NEMESIS_SPEEDUP
-	await _execute(Arch.Side.NEMESIS, opt, true)
+	await _execute(Arch.Side.NEMESIS, opt)
 	Engine.time_scale = 1.0
 
 
@@ -1236,11 +1183,12 @@ func _send_bullies() -> void:
 			if p.side == side and p.kind == Arch.Kind.HATER:
 				haters.append(p)
 		if haters.size() >= Arch.BULLY_FROM_HATERS:
-			haters[rng.randi() % haters.size()].set_kind_side(Arch.Kind.BULLY, side)
+			var b: Person = haters[rng.randi() % haters.size()]
+			b.set_kind_side(Arch.Kind.BULLY, side)
 			if side == Arch.Side.NEMESIS:
-				hud.toast("One of theirs has been sent to sit at the front of your talk.")
+				hud.toast("%s, their bully, will sit at the front of your talk." % b.person_name)
 			else:
-				hud.toast("One of yours is off to heckle their talk.")
+				hud.toast("%s goes to bully their talk from the front row." % b.person_name)
 
 
 func _walk_to(p: Person, target: Vector3, max_time: float = 12.0) -> void:
@@ -1291,6 +1239,8 @@ func _present(side: int) -> void:
 	_spring_rig(side)
 	talk_ui.begin(side, satchel[side], assembled[0], assembled[1], round_no, {
 		"charm": _stat(side, 0), "grit": _stat(side, 3), "engineer": _has(side, Arch.Role.ENGINEER),
+		"story_minus": _has(side, Arch.Role.ENGINEER), "data_minus": _has(side, Arch.Role.SALES),
+		"bully_takes": 2 if _has(side, Arch.Role.CEO) else 1,
 	})
 	var result: Dictionary = await talk_ui.finished
 	_apply_talk(result)

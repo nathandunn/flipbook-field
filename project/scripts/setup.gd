@@ -1,9 +1,9 @@
 ## Setup — who you are, what you are good at, who is coming with you.
 ##
 ## Three short pages on one paper panel: pick a job (its costume, its taste,
-## its rule), spend four free points on four stats, then pick up to four
-## colleagues to start on your side. The nemesis is dealt the same number of
-## colleagues, so the party is a plan, not a head start.
+## its upside and its downside), buy and sell stat points, then pick exactly
+## four colleagues - one of each job, not your own. The nemesis is dealt the
+## same, so the party is a plan, not a head start.
 ##
 ## Pure UI, same as the planner: it draws, it reports.
 class_name Setup
@@ -60,35 +60,62 @@ func _show() -> void:
 	match _page:
 		0:
 			_title.text = "Who are you?"
-			_sub.text = "A job is a costume, a taste, and a rule your side gets while you are clapping for it."
+			_sub.text = "Every job has an upside and a downside - both on while that job is on your side."
 			for r in Arch.PLAYABLE:
-				var st: Array = Arch.ROLE_STATS[r]
-				var b := _button("%s   —   %s   ·   charm %d  guile %d  hustle %d  grit %d" % [
-					Arch.ROLE_NAME[r], Arch.ROLE_PERK[r], st[0], st[1], st[2], st[3]], true)
+				var b := _button("%s   +  %s   -  %s" % [Arch.ROLE_NAME[r], Arch.ROLE_PERK[r], Arch.ROLE_DOWNSIDE[r]], true)
 				b.pressed.connect(_pick_role.bind(r))
 			_hint.text = "Your nemesis is dealt a job the same way."
 		1:
-			_title.text = "%s. What are you good at?" % Arch.ROLE_NAME[role]
-			_sub.text = "%d point%s left to spend. Tap a stat to add one; tap it again past the cap and it starts over." % [_left(), "" if _left() == 1 else "s"]
+			_title.text = "%s. Buy and sell your stats." % Arch.ROLE_NAME[role]
+			_sub.text = "%d point%s to spend. Sell a point below your job's start to spend it elsewhere." % [_left(), "" if _left() == 1 else "s"]
 			for i in range(4):
-				var b := _button("%s  %s   —   %s" % [Arch.STAT_NAME[i], _pips(stats[i]), Arch.STAT_DESC[i]], true)
-				b.pressed.connect(_bump.bind(i))
-			var go := _button("Done with stats", _left() == 0)
+				_stat_row(i)
+			var go := _button("Done  -  every point spent" if _left() == 0 else "Spend every point to go on (%d left)" % _left(), _left() == 0)
 			go.pressed.connect(_next)
-			_hint.text = "Base points come from the job; the rest are yours."
+			_hint.text = "Charm, guile, hustle and grit each change a number you will see on a card."
 		2:
-			_title.text = "Who is coming with you?"
-			_sub.text = "Up to %d colleagues start on your side. Each brings their rule. Picked: %s" % [
-				Arch.PARTY_MAX, _party_line()]
+			_title.text = "Pick your party: exactly %d, one of each job" % Arch.PARTY_SIZE
+			_sub.text = "Picked %d of %d: %s" % [party.size(), Arch.PARTY_SIZE, _party_line()]
 			for r in Arch.PLAYABLE:
-				var n := party.count(r)
-				var b := _button("%s%s   —   %s" % [Arch.ROLE_NAME[r], (" ×%d" % n) if n > 0 else "", Arch.ROLE_PERK[r]], true)
+				if r == role:
+					_button("%s   -  that is you" % Arch.ROLE_NAME[r], false)
+					continue
+				var on := party.has(r)
+				var b := _button("%s %s   +  %s   -  %s" % ["[x]" if on else "[  ]", Arch.ROLE_NAME[r], Arch.PERK_SHORT[r], Arch.DOWN_SHORT[r]],
+					on or party.size() < Arch.PARTY_SIZE)
 				b.pressed.connect(_toggle_party.bind(r))
-			var go := _button("Begin  —  %d in your party" % party.size(), party.size() > 0)
+			var go := _button("Begin" if party.size() == Arch.PARTY_SIZE else "Pick %d more" % (Arch.PARTY_SIZE - party.size()),
+				party.size() == Arch.PARTY_SIZE)
 			go.pressed.connect(_finish)
-			var clr := _button("Clear the list", party.size() > 0)
-			clr.pressed.connect(_clear_party)
-			_hint.text = "The same job twice is allowed. The nemesis gets as many colleagues as you take."
+			_hint.text = "Tap a job to add or drop it. The nemesis gets %d too, none twice." % Arch.PARTY_SIZE
+
+
+## One stat: its pips, what it does, and a sell and a buy button.
+func _stat_row(i: int) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var minus := _small("-  sell", stats[i] > 0)
+	minus.pressed.connect(_sell.bind(i))
+	row.add_child(minus)
+	var plus := _small("+  buy", _left() > 0 and stats[i] < Arch.STAT_MAX)
+	plus.pressed.connect(_buy.bind(i))
+	row.add_child(plus)
+	var l := Label.new()
+	l.text = "%s  %s   %s" % [Arch.STAT_NAME[i], _pips(stats[i]), Arch.STAT_DESC[i]]
+	l.add_theme_font_size_override("font_size", 14)
+	l.add_theme_color_override("font_color", INK)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(l)
+	_box.add_child(row)
+
+
+func _small(text: String, enabled: bool) -> Button:
+	var b := _button(text, enabled)
+	_box.remove_child(b)
+	b.custom_minimum_size = Vector2(84, 30)
+	b.size_flags_horizontal = 0
+	b.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	return b
 
 
 func _left() -> int:
@@ -122,17 +149,20 @@ func _pick_role(r: int) -> void:
 	stats = [0, 0, 0, 0]
 	for i in range(4):
 		stats[i] = int(Arch.ROLE_STATS[r][i])
+	party.clear()
 	_page = 1
 	_show()
 
 
-func _bump(i: int) -> void:
-	var base: int = int(Arch.ROLE_STATS[role][i])
+func _buy(i: int) -> void:
 	if _left() > 0 and stats[i] < Arch.STAT_MAX:
 		stats[i] += 1
-	else:
-		# Past the cap or out of points: give this stat's free points back.
-		stats[i] = base
+	_show()
+
+
+func _sell(i: int) -> void:
+	if stats[i] > 0:
+		stats[i] -= 1
 	_show()
 
 
@@ -144,18 +174,15 @@ func _next() -> void:
 
 
 func _toggle_party(r: int) -> void:
-	if party.size() < Arch.PARTY_MAX:
+	if party.has(r):
+		party.erase(r)
+	elif party.size() < Arch.PARTY_SIZE and r != role:
 		party.append(r)
 	_show()
 
 
-func _clear_party() -> void:
-	party.clear()
-	_show()
-
-
 func _finish() -> void:
-	if party.is_empty():
+	if party.size() != Arch.PARTY_SIZE:
 		return
 	visible = false
 	_clear()

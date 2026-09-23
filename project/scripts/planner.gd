@@ -12,10 +12,6 @@ extends Control
 
 ## A card was pressed. [param opt] is the option dictionary as it was offered.
 signal picked(opt: Dictionary)
-## The player would rather walk to a station and press E.
-signal manual()
-## Pressed while a move is being walked: stop and hand the controls back.
-signal took_over()
 
 const PAPER := Color("fbf7ec")
 const INK := Color("12101a")
@@ -31,6 +27,9 @@ var _box: VBoxContainer
 ## landscape gets the same cards as a desktop, just with a thumb involved.
 var _scroll: ScrollContainer
 var _panel_rect := Rect2()
+## Room left for the roster on the left and the floor plan at the top right.
+var left_margin: float = 0.0
+var top_margin: float = 0.0
 
 
 func _ready() -> void:
@@ -80,7 +79,6 @@ func offer(round_no: int, move_no: int, moves: int, opts: Array, hand_line: Stri
 		var b := _button(text, o.get("enabled", true))
 		if o.get("enabled", true):
 			b.pressed.connect(_pick.bind(o))
-	_button("Play it myself — walk to a station and press E", true).pressed.connect(_by_hand)
 	_hint.text = "A card can be a slide at the rock, or spent to buy somebody who wants it."
 
 
@@ -89,14 +87,9 @@ func _pick(o: Dictionary) -> void:
 	picked.emit(o)
 
 
-func _by_hand() -> void:
-	close()
-	manual.emit()
-
-
 # --- watching ----------------------------------------------------------------
 
-## Slim bar shown while a move is walked: where we are, and one way out.
+## Slim bar shown while a move is walked: where we are.
 func running(step: int, total: int, text: String) -> void:
 	_mode = "run"
 	visible = true
@@ -104,12 +97,6 @@ func running(step: int, total: int, text: String) -> void:
 	_sub.text = ""
 	_hint.text = ""
 	_clear()
-	_button("Take over — stop here and walk it yourself", true).pressed.connect(_take_over)
-
-
-func _take_over() -> void:
-	close()
-	took_over.emit()
 
 
 func close() -> void:
@@ -174,7 +161,8 @@ func _process(_delta: float) -> void:
 	position = Vector2.ZERO
 	size = vp
 
-	var w: float = minf(940.0, vp.x - 40.0)
+	var lo: float = left_margin + 12.0
+	var w: float = minf(940.0, vp.x - lo - 20.0)
 	var pad := 20.0
 
 	# Measured, not guessed: row height comes from the theme font and the card
@@ -182,9 +170,9 @@ func _process(_delta: float) -> void:
 	var head := _title.get_minimum_size().y + 4.0 + _sub.get_minimum_size().y + 8.0
 	var rows := _box.get_combined_minimum_size().y
 	var foot := 0.0 if _mode == "run" else 28.0
-	var h: float = minf(pad * 2.0 + head + rows + foot, vp.y - 44.0)
+	var h: float = minf(pad * 2.0 + head + rows + foot, vp.y - top_margin - 22.0 - 12.0)
 	_panel_rect = Rect2(
-		Vector2(roundf(vp.x * 0.5 - w * 0.5), roundf(vp.y - h - 22.0)), Vector2(w, h)
+		Vector2(roundf(lo + (vp.x - lo - 20.0 - w) * 0.5), roundf(vp.y - h - 22.0)), Vector2(w, h)
 	)
 
 	var x := _panel_rect.position.x + pad

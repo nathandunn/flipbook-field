@@ -3,7 +3,7 @@
 ## end: wins, margin, lead changes, decisions per match, how often a card was
 ## blocked, how often a buy was on the table.
 ##
-##   POLICY=greedy|random|manual  MATCHES=n  SPEED=k  SEED=s
+##   POLICY=greedy|random  MATCHES=n  SPEED=k  SEED=s
 ##   godot4 --headless --path project --script /abs/path/tools/drive6.gd
 ##
 ## greedy reads the same "value" off each card the nemesis does, so a level
@@ -25,12 +25,12 @@ var poach_offered := 0
 var poach_taken := 0
 var kinds := {}
 var frames := 0
-var manual_done_once := false
 var last_click_frame := -100
 var errors := 0
 var t0 := 0.0
 var last_phase := -1
 var scrolled_for := {}
+var sold_once := false
 
 func _initialize() -> void:
 	policy = OS.get_environment("POLICY") if OS.get_environment("POLICY") != "" else "greedy"
@@ -107,20 +107,37 @@ func _process(_d: float) -> bool:
 			0:
 				_click(btns[rngd.randi() % btns.size()])
 			1:
+				# Sell one point first, so selling is exercised, then buy
+				# until every point is spent.
 				for b in btns:
 					if (b as Button).text.begins_with("Done"):
 						_click(b)
 						return false
-				_click(btns[rngd.randi() % 4])
-			2:
-				var want: int = int(OS.get_environment("PARTY")) if OS.get_environment("PARTY") != "" else 4
-				if su.party.size() >= want:
+				if not sold_once:
 					for b in btns:
-						if (b as Button).text.begins_with("Begin"):
+						if (b as Button).text.begins_with("-"):
+							sold_once = true
 							_click(b)
-							print("SETUP role=%s stats=%s party=%s" % [Arch.ROLE_NAME[su.role], str(su.stats), str(su.party)])
 							return false
-				_click(btns[rngd.randi() % 8])
+				var buys: Array = []
+				for b in btns:
+					if (b as Button).text.begins_with("+"):
+						buys.append(b)
+				if not buys.is_empty():
+					_click(buys[rngd.randi() % buys.size()])
+			2:
+				for b in btns:
+					if (b as Button).text.begins_with("Begin"):
+						_click(b)
+						print("SETUP role=%s stats=%s party=%s" % [Arch.ROLE_NAME[su.role], str(su.stats), str(su.party)])
+						sold_once = false
+						return false
+				var open_rows: Array = []
+				for b in btns:
+					if (b as Button).text.begins_with("[  ]"):
+						open_rows.append(b)
+				if not open_rows.is_empty():
+					_click(open_rows[rngd.randi() % open_rows.size()])
 		return false
 
 	if g.phase == 2 and last_phase != 2:
@@ -158,14 +175,6 @@ func _process(_d: float) -> bool:
 		if enabled.is_empty():
 			return false
 		var choice: Dictionary = {}
-		if policy == "manual" and not manual_done_once:
-			manual_done_once = true
-			# Press "Play it myself", then stand on a desk and press E.
-			for b in btns:
-				if (b as Button).text.begins_with("Play it myself"):
-					_click(b)
-					_manual_step.call_deferred(g)
-					return false
 		if policy == "random":
 			choice = enabled[rngd.randi() % enabled.size()]
 		else:
@@ -249,25 +258,6 @@ func _process(_d: float) -> bool:
 		_click(best)
 		return false
 	return false
-
-func _manual_step(g: Node) -> void:
-	await create_timer(0.3).timeout
-	var o = g.office
-	var pos: Vector3 = o.desk_points[1]
-	g.player.global_position = pos + Vector3(0, 0.3, 0)
-	await process_frame
-	await process_frame
-	var st: Dictionary = o.station_at(g.player.global_position)
-	print("manual: at station=%s awaiting=%s busy=%s locked=%s" % [str(st.get("label","-")), str(g._awaiting_manual), str(g._busy), str(g.player.input_locked)])
-	var before: int = g.satchel[Arch.Side.PLAYER].size()
-	var e := InputEventKey.new()
-	e.keycode = KEY_E
-	e.physical_keycode = KEY_E
-	e.pressed = true
-	root.push_input(e, true)
-	await create_timer(1.5).timeout
-	print("manual: hand %d -> %d  occupied=%s" % [before, g.satchel[Arch.Side.PLAYER].size(), str(g.occupied)])
-	decisions += 1
 
 func _record(g: Node) -> void:
 	var a: int = g._count(Arch.Side.PLAYER)

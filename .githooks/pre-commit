@@ -1,0 +1,40 @@
+#!/bin/bash
+# Build and gate before any commit that touches the game.
+#
+# Re-exports web/ from project/ (so what is committed is what gets served),
+# then plays matches through the real UI with tools/drive6.gd and refuses the
+# commit on a script error, an off-screen button or a card that could not be
+# clicked. The rebuilt web/, bodies and head backs are added to the commit.
+#
+#   SKIP_BUILD=1 git commit ...   skip it (docs-only work, say)
+#   GATE_MATCHES=4                play more matches (default 2)
+#   GODOT=/path/to/godot4         which Godot (default: godot4 on PATH, then /usr/local/bin/godot4)
+set -euo pipefail
+[ "${SKIP_BUILD:-0}" = "1" ] && exit 0
+cd "$(git rev-parse --show-toplevel)"
+git diff --cached --name-only | grep -qE '^(project/|art/|build\.sh)' || exit 0
+
+GODOT="${GODOT:-$(command -v godot4 || echo /usr/local/bin/godot4)}"
+if [ ! -x "$GODOT" ]; then
+	echo "pre-commit: no Godot at $GODOT - set GODOT, or SKIP_BUILD=1 to commit without a build" >&2
+	exit 1
+fi
+export HOME="${HOME:-/root}"
+
+echo "pre-commit: building the web export..." >&2
+if ! bash build.sh "$GODOT" > /tmp/flipbook-build.log 2>&1; then
+	tail -20 /tmp/flipbook-build.log >&2
+	echo "pre-commit: build failed (log: /tmp/flipbook-build.log)" >&2
+	exit 1
+fi
+
+echo "pre-commit: playing ${GATE_MATCHES:-2} matches through the UI..." >&2
+POLICY=greedy MATCHES="${GATE_MATCHES:-2}" SPEED=14 timeout 600 \
+	"$GODOT" --headless --path project --script "$PWD/tools/drive6.gd" > /tmp/flipbook-gate.log 2>&1 || true
+if grep -qE "SCRIPT ERROR|OFFSCREEN|NO BUTTON|TIMEOUT" /tmp/flipbook-gate.log || ! grep -q "^SUMMARY" /tmp/flipbook-gate.log; then
+	grep -E "SCRIPT ERROR|OFFSCREEN|NO BUTTON|TIMEOUT" /tmp/flipbook-gate.log | head >&2 || true
+	echo "pre-commit: gate failed (log: /tmp/flipbook-gate.log)" >&2
+	exit 1
+fi
+grep "^SUMMARY" /tmp/flipbook-gate.log | cut -c1-160 >&2
+git add web project/bodies project/faces

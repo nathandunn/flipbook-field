@@ -1,0 +1,28 @@
+#!/bin/bash
+# Ship main: push, then redeploy the site.
+#
+# Only on the main branch, only where the hub's deploy script exists. Runs in
+# the background so the commit returns at once; progress goes to
+# /tmp/flipbook-deploy.log and ends with DEPLOYED <sha> or the error.
+#
+#   SKIP_DEPLOY=1 git commit ...   commit without shipping
+[ "${SKIP_DEPLOY:-0}" = "1" ] && exit 0
+[ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] || exit 0
+DEPLOY="${DEPLOY:-/opt/scripts/deploy.sh}"
+APP="${DEPLOY_APP:-flipbook-field}"
+REPO="${DEPLOY_REPO:-nathandunn/flipbook-field}"
+PORT="${DEPLOY_PORT:-80}"
+if [ ! -x "$DEPLOY" ]; then
+	echo "post-commit: no $DEPLOY on this machine - push and deploy from the hub" >&2
+	exit 0
+fi
+cd "$(git rev-parse --show-toplevel)"
+(
+	set -e
+	export HOME="${HOME:-/root}"
+	if [ -x /opt/scripts/git-cred-sm.sh ]; then /opt/scripts/git-cred-sm.sh > /dev/null 2>&1 || true; fi
+	git push -q origin HEAD
+	"$DEPLOY" "$APP" "$REPO" "$PORT"
+	echo "DEPLOYED $(git rev-parse --short HEAD)"
+) > /tmp/flipbook-deploy.log 2>&1 &
+echo "post-commit: pushing and deploying in the background (tail -f /tmp/flipbook-deploy.log)" >&2

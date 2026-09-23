@@ -11,48 +11,51 @@ would clap for them wins.
 
 Open `project/` in Godot 4.4 (Forward+) and press F5.
 
-| Key | |
-|---|---|
-| `WASD` | move (camera-relative) |
-| `Shift` | run |
-| mouse | orbit camera (click once to capture the pointer) |
-| `E` / `Space` | act at a station · present at the rock |
-| `R` | restart the match |
-| `T` | toggle the screen-space ink pass |
-| `Esc` | release the mouse |
-
-On a phone: left thumb drags a floating stick to walk, the right side drags to
-look, and the **TALK** button acts.
+Everything is a click: a setup screen, then one card a move. There is no
+walking by hand. `R` restarts the match, `T` toggles the screen-space ink pass.
 
 ## Who you are
 
-The match opens on a setup screen: pick a **job**, spend four points on four
-**stats**, and take up to four **colleagues** with you. The nemesis is dealt a
-job, the same points, and as many colleagues as you took.
+The match opens on three pages:
 
-A job is a costume, a taste, and a rule. The rule belongs to whichever side has
-one of that job clapping for it — so buying their IT person unlocks their
-projector, and losing your Legal puts your hand back on the table.
+1. **Pick a job.** Every job has an upside *and* a downside, and both are on for
+   your side while that job is on it — you, or anyone of that job clapping for you.
+2. **Buy and sell stats.** Each job starts somewhere on Charm / Guile / Hustle /
+   Grit; you have four points to spend, and can sell a point below the job's
+   start to spend it elsewhere. `- sell` / `+ buy` on every row; you go on when
+   every point is spent.
+3. **Pick your party: exactly four, one of each job, not your own.** The nemesis
+   is dealt a job, the same points, and four distinct colleagues of its own.
 
-| Job | wants | rule while one is on your side |
-|---|---|---|
-| **CEO** | Data / Story | one more seat on the grass at your talks |
-| **Engineer** | Data / Gadget | Data and Gadget slides land one extra clap per fan |
-| **IT** | Gadget | your projector cannot be rigged |
-| **HR** | Story | their bullies are turned away at the door |
-| **Marketing** | Story / Gadget | your rumours cool twice as hard |
-| **Sales** | Snacks / Gadget | buy from further away; the stream closes three |
-| **Legal** | Data | your cards cannot be pinched |
-| **Intern** | Snacks | desks warm one more neutral; interns can be bought with any card |
+| Job | wants | upside | downside |
+|---|---|---|---|
+| **CEO** | Data / Story | +1 seat on the grass at your talks | a bully in your crowd takes two, not one |
+| **Engineer** | Data / Gadget | Data and Gadget land +1 clap per fan | Story lands −1 clap per fan |
+| **IT** | Gadget | your projector cannot be rigged | you cannot rig theirs either |
+| **HR** | Story | their bullies are turned away | you cannot send hecklers |
+| **Marketing** | Story / Gadget | your rumours cool twice as hard | their rumours hit you twice as hard |
+| **Sales** | Snacks / Gadget | buy from further away; the stream closes three | Data lands −1 clap per fan |
+| **Legal** | Data | your cards cannot be pinched | one step less a move |
+| **Intern** | Snacks | desks warm one more neutral | an intern can be bought with any card |
 
-Everybody on the grass has a job too, drawn from the usual office mix (lots of
-interns, one CEO at most), so who you court is a decision: the engineer by the
-stream is worth more to you than the intern if you present Data.
+Because a rule belongs to whoever has that job on their side, buying their IT
+person unlocks their projector — and lands IT's downside on you. Everybody on
+the grass has a job too (lots of interns, one CEO at most).
 
 **Stats** — Charm: claps from your slides, +12% a point. Guile: rumours cool
-harder and your tricks are worth more. Hustle: buy from further away, walk
-faster. Grit: boo pressure at your talk −4 a point, and an ignored heckle costs
-less. Each job starts somewhere on these; the four free points are yours.
+harder and your tricks are worth more. Hustle: one more step a move per two
+points, buy from further away. Grit: boo pressure at your talk −4 a point, and
+an ignored heckle costs less.
+
+## The roster
+
+The panel on the left is the table: both sides, everyone on them, what each
+person wants on a slide, and the upside and downside their job brings. A job
+already on a side is marked "rule already on — losing them costs only the
+clap", so you can see who is safe to lose. Hecklers are listed under the side
+that sent them, with whose talks they heckle; a bully says so. The "Send a
+heckler" card names who goes and what you lose by sending them, and a heckle
+during a talk names the heckler.
 
 ## The board
 
@@ -100,10 +103,9 @@ interaction is dull. The rules now:
 
 Each move is a card from the **planner**: one row per legal move, and every row
 says what it will do *right now* — which desk and how many want it, how many
-nearby would get curious, who you could buy and with what. Rows the other side
-has blocked are greyed with the reason. The character walks the move itself
-while you watch; **Take over** stops it and gives you the controls, and **Play it
-myself** skips the cards altogether and the station you press `E` at is your move.
+nearby would get curious, who you could buy and with what. Rows that are blocked
+— by the other side, by distance, or by a job's downside — are greyed with the
+reason. The character walks the move on the board while you watch.
 
 ## The moves
 
@@ -115,7 +117,8 @@ myself** skips the cards altogether and the station you press `E` at is your mov
   *about you*. Cold ones shrug; this is the close, not the opener.
 - **Break room** — rally. Your followers cannot be bought this round, and a wage
   slave wanders in to pad the crowd.
-- **Send a heckler** — one follower turns sour. See pieces, above.
+- **Send a heckler** — the card names who goes (whoever costs you least) and
+  what you lose. They boo at every one of their talks from then on.
 - **Buy somebody** — spend a matching card on one of theirs.
 - **Present now** — go to the rock early, with whatever is in hand.
 
@@ -195,11 +198,11 @@ after the redesign:
 
 | | greedy vs nemesis | random vs nemesis |
 |---|---|---|
-| wins / ties / losses | 15 / 6 / 11 (32 matches, random jobs and parties) | 0 / 0 / 8 |
-| mean margin | 1.9 people | 6.0 people |
-| lead changes per match | 0.55 | 0.25 |
-| decisions per match | ~29 | ~24 |
-| cards out of reach or blocked | 33% | 36% |
+| wins / ties / losses | 20 / 5 / 19 (44 matches, random jobs and parties) | 0 / 0 / 8 |
+| mean margin | 2.1 people | 6.8 people |
+| lead changes per match | 0.45 | 0.1 |
+| decisions per match | ~29 | ~21 |
+| cards out of reach or blocked | 46% | 51% |
 
 Which is what a fair two-player game looks like from the outside: level against
 an equal, punished for playing at random, and the lead moving during the match.
@@ -223,6 +226,7 @@ the underdog seat. Nothing about balance lives in behaviour code.
 - `scripts/person.gd` — one figure: archetype, job, curiosity and who it is
   for, walking. `warm_rule` is the tug of war, as a pure function.
 - `scripts/setup.gd` — the job / stats / party screen. Pure UI.
+- `scripts/roster.gd` — the left-hand panel: who is on each side and what each is worth.
 - `scripts/board.gd` — the rooms, the corridors, Dijkstra. `scripts/floor_plan.gd`
   draws it.
 - `scripts/block_figure.gd` — the paper doll. `art/bodygen.py` draws what it wears.
@@ -253,3 +257,19 @@ is most of what makes the figures read as drawn rather than simulated.
 - The pool is twelve neutrals. Most matches end with half of them still on the
   grass; a bigger office or fewer moves would make the close tighter.
 - Talks are still the loudest part of the match and the least decided by it.
+
+## Shipping: git hooks
+
+`tools/install-hooks.sh` points git at `.githooks/` (once per clone):
+
+- **pre-commit** — on any commit touching `project/`, `art/` or `build.sh`:
+  re-exports `web/`, plays two matches through the real UI with
+  `tools/drive6.gd`, refuses the commit on a script error, an off-screen button
+  or an unclickable card, and adds the rebuilt `web/`, costumes and head backs
+  to the commit. `SKIP_BUILD=1` skips it; `GATE_MATCHES=n` plays more.
+- **post-commit** — on `main`, where `/opt/scripts/deploy.sh` exists (the hub):
+  pushes and redeploys in the background, logging to `/tmp/flipbook-deploy.log`
+  and ending with `DEPLOYED <sha>`. `SKIP_DEPLOY=1` commits without shipping.
+
+So on the hub, shipping is `git commit`.
+

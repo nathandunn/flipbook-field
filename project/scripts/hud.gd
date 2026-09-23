@@ -28,6 +28,9 @@ var _prompt_visible: bool = false
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Toasts and banners go over the planner, the roster and the board: a
+	# toast under a panel is a message nobody reads.
+	z_index = 5
 
 	_round_label = _mk(20, INK)
 	_score_label = _mk(17, INK)
@@ -37,7 +40,7 @@ func _ready() -> void:
 	_toast = _mk(20, PAPER)
 	_banner = _mk(30, PAPER)
 	_hint = _mk(13, Color(0.13, 0.11, 0.18, 0.62))
-	_hint.text = "WASD move · Shift run · mouse look · E act · Esc free mouse"
+	_hint.text = ""
 
 	_prompt.visible = false
 	_toast.visible = false
@@ -149,7 +152,7 @@ func _process(delta: float) -> void:
 	if _toast_t > 0.0:
 		_toast_t -= delta
 		_toast.size = _toast.get_minimum_size()
-		_toast.position = Vector2(roundf(vp.x * 0.5 - _toast.size.x * 0.5), roundf(vp.y * 0.36))
+		_toast.position = Vector2(roundf(vp.x * 0.5 - _toast.size.x * 0.5), roundf(vp.y * 0.27))
 		if _toast_t <= 0.0:
 			_toast.visible = false
 

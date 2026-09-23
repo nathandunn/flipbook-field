@@ -154,7 +154,8 @@ const ROLE_TASTES := {
 	Role.SALES: [Taste.SNACK, Taste.GADGET], Role.LEGAL: [Taste.DATA],
 	Role.INTERN: [Taste.SNACK], Role.STAFF: [Taste.DATA, Taste.STORY, Taste.GADGET, Taste.SNACK],
 }
-## The rule a side gets while it has one of these clapping for it.
+## The rule a side gets while it has one of these on it - you, or anyone
+## clapping for you. Every job is an upside and a downside, both on at once.
 const ROLE_PERK := {
 	Role.CEO: "one more seat on the grass at your talks",
 	Role.ENGINEER: "Data and Gadget slides land one extra clap per fan",
@@ -163,8 +164,34 @@ const ROLE_PERK := {
 	Role.MARKETING: "your rumours cool twice as hard",
 	Role.SALES: "buy from further away, and the stream closes three",
 	Role.LEGAL: "your cards cannot be pinched",
-	Role.INTERN: "desks warm one more neutral; interns can be bought with any card",
+	Role.INTERN: "desks warm one more neutral",
 	Role.STAFF: "no rule; just here for the snacks",
+}
+const ROLE_DOWNSIDE := {
+	Role.CEO: "a bully in your crowd takes two of yours, not one",
+	Role.ENGINEER: "Story slides land one clap less per fan",
+	Role.IT: "you cannot rig their projector either",
+	Role.HR: "you cannot send hecklers",
+	Role.MARKETING: "their rumours hit you twice as hard too",
+	Role.SALES: "Data slides land one clap less per fan",
+	Role.LEGAL: "one step less a move - everything needs sign-off",
+	Role.INTERN: "an intern can be bought with any card",
+	Role.STAFF: "none",
+}
+## The same, short enough for a roster line.
+const PERK_SHORT := {
+	Role.CEO: "+1 seat at talks", Role.ENGINEER: "+1 clap Data/Gadget",
+	Role.IT: "can't be rigged", Role.HR: "blocks their bullies",
+	Role.MARKETING: "rumours x2", Role.SALES: "reach +3, closes 3",
+	Role.LEGAL: "hand can't be pinched", Role.INTERN: "desks warm +1",
+	Role.STAFF: "",
+}
+const DOWN_SHORT := {
+	Role.CEO: "bullies take 2", Role.ENGINEER: "-1 clap Story",
+	Role.IT: "can't rig", Role.HR: "can't send hecklers",
+	Role.MARKETING: "their rumours x2", Role.SALES: "-1 clap Data",
+	Role.LEGAL: "-1 step", Role.INTERN: "buyable with any card",
+	Role.STAFF: "",
 }
 ## Where a job starts on the four stats, before free points: charm, guile,
 ## hustle, grit.
@@ -191,8 +218,10 @@ const STAT_DESC := [
 ]
 const FREE_POINTS := 4
 const STAT_MAX := 5
-## Colleagues who start on your side. The nemesis gets the same number.
-const PARTY_MAX := 4
+## Colleagues who start on your side: exactly this many, one of each job, and
+## not your own. The nemesis is dealt the same.
+const PARTY_SIZE := 4
+const PARTY_MAX := PARTY_SIZE
 
 
 static func role_tint(role: int) -> Color:

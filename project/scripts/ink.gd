@@ -133,5 +133,7 @@ const HAIRS: Array[Color] = [
 const NAMES: Array[String] = [
 	"Wren", "Bosch", "Marguerite", "Tully", "Okonkwo", "Pip",
 	"Halvard", "Nim", "Aster", "Crane", "Bramble", "Rook",
-	"Sable", "Fen", "Quill", "Oleander",
+	"Sable", "Fen", "Quill", "Oleander", "Juniper", "Moss",
+	"Ingrid", "Tamsin", "Obi", "Linden", "Hazel", "Corvin",
+	"Petra", "Rafe", "Ottoline", "Sorrel", "Birch", "Lark",
 ]
