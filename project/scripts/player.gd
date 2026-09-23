@@ -51,6 +51,9 @@ var _move_amt: float = 0.0
 
 func _ready() -> void:
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)) * 1.8
+	# Same as Person: stand on the world, pass through people.
+	collision_layer = 2
+	collision_mask = 1
 
 	dress(role)
 

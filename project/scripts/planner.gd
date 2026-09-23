@@ -33,6 +33,9 @@ var _panel_rect := Rect2()
 ## Room left for the roster on the left and the floor plan at the top right.
 var left_margin: float = 0.0
 var top_margin: float = 0.0
+## Tucked down to its title bar: the cards wait there until you open it.
+var folded: bool = false
+var _fold: Button
 
 
 func _ready() -> void:
@@ -55,6 +58,12 @@ func _ready() -> void:
 	_box.add_theme_constant_override("separation", 6)
 	_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.add_child(_box)
+	_fold = Fold.button(self, _toggle)
+
+
+func _toggle() -> void:
+	folded = not folded
+	Fold.mark(_fold, folded)
 
 
 func _label(size: int, col: Color) -> Label:
@@ -219,6 +228,13 @@ func _process(_delta: float) -> void:
 	var rows := _box.get_combined_minimum_size().y
 	var foot := 0.0 if _mode == "run" else _hint.get_minimum_size().y + 10.0
 	var h: float = minf(pad * 2.0 + head + rows + foot, vp.y - top_margin - 22.0 - 12.0)
+	# Folded: just the title bar, and clicks go through to nothing behind it.
+	_sub.visible = not folded
+	_scroll.visible = not folded
+	_hint.visible = not folded
+	mouse_filter = Control.MOUSE_FILTER_IGNORE if folded else Control.MOUSE_FILTER_STOP
+	if folded:
+		h = pad * 1.4 + _title.get_minimum_size().y
 	if docked:
 		_panel_rect = Rect2(Vector2(roundf(vp.x - w - 16.0), roundf(top_margin)), Vector2(w, h))
 	else:
@@ -227,7 +243,8 @@ func _process(_delta: float) -> void:
 		)
 
 	var x := _panel_rect.position.x + pad
-	var y := _panel_rect.position.y + pad
+	var y := _panel_rect.position.y + (pad * 0.7 if folded else pad)
+	_fold.position = Vector2(_panel_rect.end.x - Fold.SIZE.x - 8, _panel_rect.position.y + 8)
 
 	_title.size = _title.get_minimum_size()
 	_title.position = Vector2(x, y)
@@ -254,7 +271,8 @@ func _draw() -> void:
 	if not visible:
 		return
 	var vp := get_viewport_rect().size
-	draw_rect(Rect2(Vector2.ZERO, vp), Color(0.07, 0.06, 0.1, 0.18), true)
+	if not folded:
+		draw_rect(Rect2(Vector2.ZERO, vp), Color(0.07, 0.06, 0.1, 0.18), true)
 	draw_rect(
 		Rect2(_panel_rect.position + Vector2(8, 9), _panel_rect.size),
 		Color(0.07, 0.06, 0.1, 0.30), true

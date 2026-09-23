@@ -63,6 +63,11 @@ static func create(p_name: String, p_kind: int, p_side: int, seed_val: float) ->
 
 func _ready() -> void:
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)) * 1.8
+	# People stand on the world (layer 1) but walk through each other (they
+	# live on layer 2 and only look for layer 1). Bumping into a crowd used to
+	# stall a walk until it timed out and the mover was snapped into place.
+	collision_layer = 2
+	collision_mask = 1
 
 	var shape := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()

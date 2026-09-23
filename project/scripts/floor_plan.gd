@@ -15,6 +15,9 @@ var reach: Dictionary = {}
 var you: String = ""
 var them: String = ""
 var steps: int = 0
+## Tucked down to its title bar.
+var folded: bool = false
+var _fold: Button
 ## Colleagues on the board: [room, side, initial, morale, ready].
 var units: Array = []
 ## room -> side that walled it (IT firewall).
@@ -27,6 +30,17 @@ const H := 230.0
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = false
+	_fold = Fold.button(self, _toggle)
+
+
+func _toggle() -> void:
+	folded = not folded
+	Fold.mark(_fold, folded)
+
+
+## Height on screen right now, for whoever lays out under it.
+func shown_h() -> float:
+	return 30.0 if folded else H
 
 
 func _process(_d: float) -> void:
@@ -35,7 +49,8 @@ func _process(_d: float) -> void:
 	var vp := get_viewport_rect().size
 	# Top right: the HUD has the top left, the planner has the bottom.
 	position = Vector2(vp.x - W - 16.0, 16.0)
-	size = Vector2(W, H)
+	size = Vector2(W, shown_h())
+	_fold.position = Vector2(W - Fold.SIZE.x - 5, 4)
 	queue_redraw()
 
 
@@ -47,6 +62,15 @@ func _pt(id: String) -> Vector2:
 
 func _draw() -> void:
 	if board == null:
+		return
+	var font0 := ThemeDB.fallback_font
+	if folded:
+		draw_rect(Rect2(Vector2(6, 7), Vector2(W, 30)), Color(0.07, 0.06, 0.1, 0.3), true)
+		draw_rect(Rect2(Vector2.ZERO, Vector2(W, 30)), PAPER, true)
+		draw_rect(Rect2(Vector2.ZERO, Vector2(W, 30)), INK, false, 3.0)
+		draw_string(font0, Vector2(10, 20), "BOARD   you: %s  ·  them: %s" % [
+			board.rooms[you]["short"] if board.rooms.has(you) else "-",
+			board.rooms[them]["short"] if board.rooms.has(them) else "-"], HORIZONTAL_ALIGNMENT_LEFT, W - 44, 12, INK)
 		return
 	draw_rect(Rect2(Vector2(6, 7), Vector2(W, H)), Color(0.07, 0.06, 0.1, 0.3), true)
 	draw_rect(Rect2(Vector2.ZERO, Vector2(W, H)), PAPER, true)

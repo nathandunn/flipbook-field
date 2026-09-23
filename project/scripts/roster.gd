@@ -20,6 +20,10 @@ var _scroll: ScrollContainer
 var _box: VBoxContainer
 var _sig: String = ""
 var _t: float = 0.0
+## Tucked down to its title bar.
+var folded: bool = false
+var _fold: Button
+const HEAD := 30.0
 
 
 func _ready() -> void:
@@ -33,16 +37,30 @@ func _ready() -> void:
 	_box.add_theme_constant_override("separation", 1)
 	_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.add_child(_box)
+	_fold = Fold.button(self, _toggle)
+
+
+func _toggle() -> void:
+	folded = not folded
+	Fold.mark(_fold, folded)
+
+
+## Where the panel's bottom edge is, for whoever lays out around it.
+func bottom() -> float:
+	return position.y + size.y
 
 
 func _process(delta: float) -> void:
 	if not visible or game == null:
 		return
 	var vp := get_viewport_rect().size
-	position = Vector2(12, 128)
-	size = Vector2(W, vp.y - 128 - 34)
-	_scroll.position = Vector2(12, 10)
-	_scroll.size = size - Vector2(20, 20)
+	var top: float = game.hud.status_bottom() + 10.0 if game.get("hud") else 128.0
+	position = Vector2(12, top)
+	size = Vector2(W, HEAD + 4.0 if folded else vp.y - top - 34)
+	_scroll.visible = not folded
+	_scroll.position = Vector2(12, HEAD)
+	_scroll.size = size - Vector2(20, HEAD + 10)
+	_fold.position = Vector2(W - Fold.SIZE.x - 6, 5)
 	_t -= delta
 	if _t <= 0.0:
 		_t = 0.25
@@ -54,6 +72,10 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2(6, 7), size), Color(0.07, 0.06, 0.1, 0.25), true)
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.98, 0.96, 0.90, 0.92), true)
 	draw_rect(Rect2(Vector2.ZERO, size), INK, false, 3.0)
+	var line := "WHO'S WHO"
+	if game:
+		line += "   you %d  ·  them %d" % [game._count(Arch.Side.PLAYER), game._count(Arch.Side.NEMESIS)]
+	draw_string(ThemeDB.fallback_font, Vector2(14, 21), line, HORIZONTAL_ALIGNMENT_LEFT, W - 50, 14, INK)
 
 
 func _rebuild() -> void:

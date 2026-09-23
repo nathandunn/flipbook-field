@@ -23,6 +23,9 @@ var _actions_max: int = 4
 var _toast_t: float = 0.0
 var _banner_t: float = 0.0
 var _prompt_visible: bool = false
+## The status block tucked down to round and score.
+var folded: bool = false
+var _fold: Button
 
 
 func _ready() -> void:
@@ -45,6 +48,27 @@ func _ready() -> void:
 	_prompt.visible = false
 	_toast.visible = false
 	_banner.visible = false
+	_fold = Fold.button(self, _toggle)
+	_fold.visible = false
+
+
+func _toggle() -> void:
+	folded = not folded
+	Fold.mark(_fold, folded)
+
+
+## The status block's box: round and score always; hand and the room's wants
+## unless folded.
+func _status_rect() -> Rect2:
+	var w := maxf(_score_label.size.x, _round_label.size.x + 130.0)
+	if not folded:
+		w = maxf(w, maxf(_props_label.size.x, _demand_label.size.x))
+	return Rect2(Vector2(12, 8), Vector2(w + 32 + Fold.SIZE.x, 62.0 if folded else 110.0))
+
+
+## Bottom edge of the status block, for the roster to sit under.
+func status_bottom() -> float:
+	return _status_rect().end.y if _round_label.text != "" else 8.0
 
 
 func _mk(size: int, col: Color) -> Label:
@@ -141,6 +165,11 @@ func _process(delta: float) -> void:
 
 	_demand_label.size = _demand_label.get_minimum_size()
 	_demand_label.position = Vector2(20, 92)
+	_props_label.visible = not folded
+	_demand_label.visible = not folded
+	_fold.visible = _round_label.text != ""
+	var sr := _status_rect()
+	_fold.position = Vector2(sr.end.x - Fold.SIZE.x - 6, sr.position.y + 6)
 
 	_hint.size = _hint.get_minimum_size()
 	_hint.position = Vector2(20, vp.y - 26)
@@ -172,8 +201,7 @@ func _draw() -> void:
 	# Panel behind the status block. Nothing to say yet (the setup screen is
 	# up), nothing to draw.
 	if _round_label.text != "":
-		var top := Rect2(Vector2(12, 8), Vector2(
-			maxf(maxf(_score_label.size.x, _props_label.size.x), _demand_label.size.x) + 32, 110))
+		var top := _status_rect()
 		draw_rect(top, Color(0.98, 0.96, 0.90, 0.82), true)
 		draw_rect(top, INK, false, 3.0)
 

@@ -36,6 +36,9 @@ var _tally: Label
 var _log: Label
 var _box: VBoxContainer
 var _panel_rect := Rect2()
+## Tucked down to title and tally, to watch the crowd; the choice waits.
+var folded: bool = false
+var _fold: Button
 
 
 func _ready() -> void:
@@ -52,6 +55,12 @@ func _ready() -> void:
 	_box = VBoxContainer.new()
 	_box.add_theme_constant_override("separation", 8)
 	add_child(_box)
+	_fold = Fold.button(self, _toggle)
+
+
+func _toggle() -> void:
+	folded = not folded
+	Fold.mark(_fold, folded)
 
 
 func _label(size: int, col: Color) -> Label:
@@ -520,12 +529,19 @@ func _process(_delta: float) -> void:
 		+ _tally.get_minimum_size().y + 12.0
 	var rows: float = _box.get_combined_minimum_size().y
 	var h: float = minf(pad * 2.0 + head + rows + 12.0 + 40.0, vp.y - 44.0)
+	_sub.visible = not folded
+	_box.visible = not folded
+	_log.visible = not folded
+	mouse_filter = Control.MOUSE_FILTER_IGNORE if folded else Control.MOUSE_FILTER_STOP
+	if folded:
+		h = pad * 2.0 + _title.get_minimum_size().y + 6.0 + _tally.get_minimum_size().y
 	_panel_rect = Rect2(
 		Vector2(roundf(vp.x * 0.5 - w * 0.5), roundf(vp.y - h - 22.0)), Vector2(w, h)
 	)
 
 	var x := _panel_rect.position.x + pad
 	var y := _panel_rect.position.y + pad
+	_fold.position = Vector2(_panel_rect.end.x - Fold.SIZE.x - 10, _panel_rect.position.y + 10)
 
 	_title.size = _title.get_minimum_size()
 	_title.position = Vector2(x, y)
@@ -533,7 +549,8 @@ func _process(_delta: float) -> void:
 
 	_sub.size = _sub.get_minimum_size()
 	_sub.position = Vector2(x, y)
-	y += _sub.size.y + 10
+	if not folded:
+		y += _sub.size.y + 10
 
 	_tally.size = _tally.get_minimum_size()
 	_tally.position = Vector2(x, y)
@@ -555,7 +572,8 @@ func _draw() -> void:
 		return
 	var vp := get_viewport_rect().size
 	# Dim only the strip behind the panel; the stage above stays fully lit.
-	draw_rect(Rect2(Vector2.ZERO, vp), Color(0.07, 0.06, 0.1, 0.18), true)
+	if not folded:
+		draw_rect(Rect2(Vector2.ZERO, vp), Color(0.07, 0.06, 0.1, 0.18), true)
 	# Drop shadow then paper, the same treatment as a speech balloon.
 	draw_rect(Rect2(_panel_rect.position + Vector2(8, 9), _panel_rect.size), Color(0.07, 0.06, 0.1, 0.30), true)
 	draw_rect(_panel_rect, PAPER, true)

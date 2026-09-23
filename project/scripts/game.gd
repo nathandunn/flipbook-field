@@ -178,6 +178,10 @@ func _ready() -> void:
 	roster.game = self
 	$UI.add_child(roster)
 	planner.left_margin = Roster.W + 12.0
+	# The HUD last in the UI tree: its toasts draw on top already (z_index),
+	# and its fold tab has to be first in line for clicks too - the planner
+	# covers the window to catch stray clicks.
+	hud.move_to_front()
 	planner.top_margin = FloorPlan.H + 16.0
 
 	hud.set_hint("Pick a card each move · the board is top right · who is on each side is on the left")
@@ -573,20 +577,23 @@ func _process(_delta: float) -> void:
 	# The roster is the table; the talk and the round card sit on top of it.
 	roster.visible = _started and not talk_ui.visible
 	floor_plan.visible = _started and not talk_ui.visible
+	# The move list sits under the floor plan, however tall that is right now.
+	planner.top_margin = 16.0 + floor_plan.shown_h() + 12.0
 	if board_cam and board_cam.current:
-		_frame_board()
+		_frame_board(_delta)
 
 
 ## Aim the board camera so the whole office fits in the part of the window the
 ## panels leave clear: between the roster on the left and the move list on the
 ## right. Recomputed every frame, so any window size frames the same board.
-func _frame_board() -> void:
+func _frame_board(delta: float = 1.0) -> void:
 	var vp := get_viewport().get_visible_rect().size
 	if vp.x <= 0.0 or vp.y <= 0.0:
 		return
-	var left := Roster.W + 24.0
-	var right := vp.x - Planner.COLUMN_W - 32.0
-	var top := 128.0
+	# A folded panel gives its side of the window back to the board.
+	var left := 16.0 if roster.folded else Roster.W + 24.0
+	var right := vp.x - 16.0 if planner.folded else vp.x - Planner.COLUMN_W - 32.0
+	var top := hud.status_bottom() + 8.0
 	# A narrow window has no room for a clear column: frame the whole screen
 	# and let the panels sit over the grass.
 	if right - left < vp.x * 0.3:
@@ -603,13 +610,18 @@ func _frame_board() -> void:
 	var span_z := (BOARD_MAX.y - BOARD_MIN.y) * 0.5 * sin(pitch) * 1.15
 	var d: float = maxf(span_x * half / (free_w * 0.5 * t), span_z * half / (free_h * 0.5 * t))
 	var center := Vector3((BOARD_MIN.x + BOARD_MAX.x) * 0.5, 0.0, (BOARD_MIN.y + BOARD_MAX.y) * 0.5)
-	board_cam.global_position = center + Vector3(0.0, d * sin(pitch), d * cos(pitch))
+	var want_pos := center + Vector3(0.0, d * sin(pitch), d * cos(pitch))
 	board_cam.rotation = Vector3(-pitch, 0.0, 0.0)
 	# Slide the picture into the clear area: offsets are in metres on the
 	# camera's own plane at the focal distance.
 	var px_per_m := half / (d * t)
-	board_cam.h_offset = -((left + right) * 0.5 - vp.x * 0.5) / px_per_m
-	board_cam.v_offset = -((top + vp.y) * 0.5 - vp.y * 0.5) / px_per_m
+	var want_h := -((left + right) * 0.5 - vp.x * 0.5) / px_per_m
+	var want_v := -((top + vp.y) * 0.5 - vp.y * 0.5) / px_per_m
+	# Ease into a new framing (a panel folded or opened) rather than jump.
+	var k := clampf(delta * 6.0, 0.0, 1.0)
+	board_cam.global_position = board_cam.global_position.lerp(want_pos, k)
+	board_cam.h_offset = lerpf(board_cam.h_offset, want_h, k)
+	board_cam.v_offset = lerpf(board_cam.v_offset, want_v, k)
 
 
 # --- one move ----------------------------------------------------------------

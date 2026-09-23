@@ -66,6 +66,20 @@ the roster on the left and the move list docked on the right, for any window
 size; narrow windows get the full-screen shot with the panels over the grass.
 Talks cut to the stage camera at the Rock.
 
+**Every panel folds.** The status block, the roster, the floor plan, the move
+list and the talk panel each carry a [–] tab: it tucks the panel down to a
+title bar (the status keeps round and score; the roster says how many each
+side has; the floor plan says which room each presenter is in; the move list
+keeps "Round 1 · move 2 of 4"; the talk keeps its tally) and [+] brings it
+back. The camera eases into whatever the open panels leave clear, so with
+everything folded the board fills the window.
+
+People walk through each other: everyone stands on the world's collision
+layer but only the world blocks them. Crowds used to stall walks until they
+timed out and the mover was snapped into place — about one walk in twenty for
+the player and two in seven for colleagues. Measured after: 0 of 182 walks
+ended more than 1.5 m short.
+
 The office is a Clue board: rooms joined by corridors, drawn in the top-right
 corner. A move is **walk up to N steps, then act where you stand**. Two steps
 a move, plus one for every two points of Hustle. The Rock is two steps from
