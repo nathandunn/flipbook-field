@@ -59,6 +59,13 @@ during a talk names the heckler.
 
 ## The board
 
+The camera sits high over the whole office (`game.gd::_frame_board`), so you
+watch every move walked from room to room — yours, theirs, and every
+colleague's. It frames the office into the clear middle of the window, between
+the roster on the left and the move list docked on the right, for any window
+size; narrow windows get the full-screen shot with the panels over the grass.
+Talks cut to the stage camera at the Rock.
+
 The office is a Clue board: rooms joined by corridors, drawn in the top-right
 corner. A move is **walk up to N steps, then act where you stand**. Two steps
 a move, plus one for every two points of Hustle. The Rock is two steps from

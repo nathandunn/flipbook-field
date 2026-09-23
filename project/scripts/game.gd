@@ -40,6 +40,14 @@ enum Phase { PLAYER_TURN, TALK, NEMESIS_TURN, ROUND_END, MATCH_OVER }
 
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const NEMESIS_SPEEDUP := 3.0
+## The board camera: vertical field of view, and how steeply it looks down.
+const BOARD_FOV := 40.0
+const BOARD_PITCH := 54.0
+## What has to fit in the shot: the office's footprint on the grass (desks at
+## the left, the Break room at the right, the Rock at the back, the Stream at
+## the front), in metres.
+const BOARD_MIN := Vector2(-15.0, -14.0)
+const BOARD_MAX := Vector2(14.0, 13.0)
 ## Faces 0 and 1 are spoken for - the two drawings cast as the player and the
 ## nemesis. The rest are dealt from a shuffled deck so no two people in a match
 ## wear the same face.
@@ -90,6 +98,10 @@ var _used_names: Array[String] = []
 var _face_deck: Array[int] = []
 var _busy: bool = false
 var talk_cam: Camera3D
+## The board camera: high over the whole office, so every move can be watched
+## from room to room. It replaced the over-the-shoulder follow camera, which
+## showed a wall of backs and none of the board.
+var board_cam: Camera3D
 
 var planner: Planner
 var setup: Setup
@@ -136,6 +148,14 @@ func _ready() -> void:
 	add_child(talk_cam)
 	talk_cam.global_position = Office.ROCK_POS + Vector3(10.5, 4.2, 2.0)
 	talk_cam.look_at(Office.ROCK_POS + Vector3(0.5, 1.3, 4.2))
+
+	board_cam = Camera3D.new()
+	board_cam.name = "BoardCamera"
+	board_cam.fov = BOARD_FOV
+	board_cam.far = 400.0
+	add_child(board_cam)
+	board_cam.current = true
+	dialogue.camera = board_cam
 
 	talk_ui.round_closed.connect(_on_round_closed)
 
@@ -427,7 +447,7 @@ func _spawn_player() -> void:
 	player = PLAYER_SCENE.instantiate()
 	add_child(player)
 	player.global_position = Vector3(0, 0.2, 4.0)
-	dialogue.camera = player.camera
+	dialogue.camera = board_cam if board_cam else player.camera
 	touch.player = player
 
 
@@ -553,6 +573,43 @@ func _process(_delta: float) -> void:
 	# The roster is the table; the talk and the round card sit on top of it.
 	roster.visible = _started and not talk_ui.visible
 	floor_plan.visible = _started and not talk_ui.visible
+	if board_cam and board_cam.current:
+		_frame_board()
+
+
+## Aim the board camera so the whole office fits in the part of the window the
+## panels leave clear: between the roster on the left and the move list on the
+## right. Recomputed every frame, so any window size frames the same board.
+func _frame_board() -> void:
+	var vp := get_viewport().get_visible_rect().size
+	if vp.x <= 0.0 or vp.y <= 0.0:
+		return
+	var left := Roster.W + 24.0
+	var right := vp.x - Planner.COLUMN_W - 32.0
+	var top := 128.0
+	# A narrow window has no room for a clear column: frame the whole screen
+	# and let the panels sit over the grass.
+	if right - left < vp.x * 0.3:
+		left = 0.0
+		right = vp.x
+		top = 0.0
+	var free_w := right - left
+	var free_h := vp.y - top
+	var t := tan(deg_to_rad(BOARD_FOV) * 0.5)
+	var half := (vp.y * 0.5)
+	var pitch := deg_to_rad(BOARD_PITCH)
+	var span_x := (BOARD_MAX.x - BOARD_MIN.x) * 0.5 * 1.08
+	# Seen from above at an angle, depth shrinks by the sine of the pitch.
+	var span_z := (BOARD_MAX.y - BOARD_MIN.y) * 0.5 * sin(pitch) * 1.15
+	var d: float = maxf(span_x * half / (free_w * 0.5 * t), span_z * half / (free_h * 0.5 * t))
+	var center := Vector3((BOARD_MIN.x + BOARD_MAX.x) * 0.5, 0.0, (BOARD_MIN.y + BOARD_MAX.y) * 0.5)
+	board_cam.global_position = center + Vector3(0.0, d * sin(pitch), d * cos(pitch))
+	board_cam.rotation = Vector3(-pitch, 0.0, 0.0)
+	# Slide the picture into the clear area: offsets are in metres on the
+	# camera's own plane at the focal distance.
+	var px_per_m := half / (d * t)
+	board_cam.h_offset = -((left + right) * 0.5 - vp.x * 0.5) / px_per_m
+	board_cam.v_offset = -((top + vp.y) * 0.5 - vp.y * 0.5) / px_per_m
 
 
 # --- one move ----------------------------------------------------------------
@@ -1758,8 +1815,8 @@ func _apply_talk(result: Dictionary) -> void:
 	satchel[side].clear()
 
 	talk_cam.current = false
-	if player and player.camera:
-		player.camera.current = true
+	if board_cam:
+		board_cam.current = true
 	if side == Arch.Side.PLAYER:
 		player.global_position = office.rock_point + Vector3(0, 0.3, 2.4)
 

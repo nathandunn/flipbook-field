@@ -12,7 +12,7 @@ extends Control
 const PAPER := Color("fbf7ec")
 const INK := Color("12101a")
 const SOFT := Color(0.13, 0.11, 0.18, 0.72)
-const W := 360.0
+const W := 320.0
 
 ## The game node; read-only from here.
 var game: Node

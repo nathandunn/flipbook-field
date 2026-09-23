@@ -15,6 +15,9 @@ signal picked(opt: Dictionary)
 
 const PAPER := Color("fbf7ec")
 const INK := Color("12101a")
+## Width of the move list when it is docked as a column on the right, which
+## leaves the middle of the window to the board.
+const COLUMN_W := 460.0
 
 ## "off" | "offer" | "run"
 var _mode: String = "off"
@@ -39,6 +42,9 @@ func _ready() -> void:
 
 	_title = _label(24, INK)
 	_sub = _label(15, Color(0.13, 0.11, 0.18, 0.85))
+	# The hand line can outgrow a column; trim it rather than widen the panel.
+	_sub.clip_text = true
+	_sub.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_hint = _label(14, Color(0.13, 0.11, 0.18, 0.70))
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
@@ -154,7 +160,9 @@ func _button(text: String, enabled: bool) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.add_theme_font_size_override("font_size", 13)
-	b.custom_minimum_size = Vector2(560, 26)
+	b.custom_minimum_size = Vector2(400, 26)
+	# A narrow column wraps a long card onto two lines rather than cutting it.
+	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	b.focus_mode = Control.FOCUS_NONE
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.disabled = not enabled
@@ -198,16 +206,25 @@ func _process(_delta: float) -> void:
 	var lo: float = left_margin + 12.0
 	var w: float = minf(940.0, vp.x - lo - 20.0)
 	var pad := 20.0
+	# Docked on the right, under the floor plan, when the window is wide enough
+	# to keep the board clear in the middle; along the bottom otherwise.
+	var docked: bool = vp.x - lo - COLUMN_W - 32.0 >= vp.x * 0.3
+	if docked:
+		w = COLUMN_W
+	_hint.size.x = w - pad * 2.0
 
 	# Measured, not guessed: row height comes from the theme font and the card
 	# margins, and a guessed height once left the last rows off the screen.
 	var head := _title.get_minimum_size().y + 4.0 + _sub.get_minimum_size().y + 8.0
 	var rows := _box.get_combined_minimum_size().y
-	var foot := 0.0 if _mode == "run" else 28.0
+	var foot := 0.0 if _mode == "run" else _hint.get_minimum_size().y + 10.0
 	var h: float = minf(pad * 2.0 + head + rows + foot, vp.y - top_margin - 22.0 - 12.0)
-	_panel_rect = Rect2(
-		Vector2(roundf(lo + (vp.x - lo - 20.0 - w) * 0.5), roundf(vp.y - h - 22.0)), Vector2(w, h)
-	)
+	if docked:
+		_panel_rect = Rect2(Vector2(roundf(vp.x - w - 16.0), roundf(top_margin)), Vector2(w, h))
+	else:
+		_panel_rect = Rect2(
+			Vector2(roundf(lo + (vp.x - lo - 20.0 - w) * 0.5), roundf(vp.y - h - 22.0)), Vector2(w, h)
+		)
 
 	var x := _panel_rect.position.x + pad
 	var y := _panel_rect.position.y + pad
@@ -216,7 +233,7 @@ func _process(_delta: float) -> void:
 	_title.position = Vector2(x, y)
 	y += _title.size.y + 4
 
-	_sub.size = _sub.get_minimum_size()
+	_sub.size = Vector2(_panel_rect.size.x - pad * 2.0, _sub.get_minimum_size().y)
 	_sub.position = Vector2(x, y)
 	y += _sub.size.y + 8
 
@@ -227,8 +244,8 @@ func _process(_delta: float) -> void:
 	for c in _box.get_children():
 		(c as Control).custom_minimum_size.x = _panel_rect.size.x - pad * 2.0 - 12.0
 
-	_hint.size = Vector2(_panel_rect.size.x - pad * 2.0, 22)
-	_hint.position = Vector2(x, _panel_rect.end.y - pad - 16.0)
+	_hint.size = Vector2(_panel_rect.size.x - pad * 2.0, _hint.get_minimum_size().y)
+	_hint.position = Vector2(x, _panel_rect.end.y - pad - _hint.size.y + 4.0)
 
 	queue_redraw()
 
