@@ -177,16 +177,16 @@ func _draw() -> void:
 		draw_rect(top, Color(0.98, 0.96, 0.90, 0.82), true)
 		draw_rect(top, INK, false, 3.0)
 
-	# Action pips: one ink-outlined square per action, filled while unspent.
-	var pip := 22.0
-	var gap := 10.0
-	var total_w := _actions_max * pip + (_actions_max - 1) * gap
-	var x0 := vp.x * 0.5 - total_w * 0.5
-	var y0 := vp.y - 78.0
-	for i in range(_actions_max):
+	# Action pips: one ink-outlined square per move, filled while unspent. In
+	# the status block beside the round, not over the cards.
+	var pip := 16.0
+	var gap := 7.0
+	var x0 := _round_label.position.x + _round_label.size.x + 22.0
+	var y0 := _round_label.position.y + 6.0
+	for i in range(_actions_max if _round_label.text != "" else 0):
 		var r := Rect2(Vector2(x0 + i * (pip + gap), y0), Vector2(pip, pip))
-		draw_rect(r, PAPER if i < _actions_left else Color(0.98, 0.96, 0.90, 0.25), true)
-		draw_rect(r, INK, false, 3.0)
+		draw_rect(r, Color(0.13, 0.11, 0.18, 0.85) if i < _actions_left else Color(1, 1, 1, 0.4), true)
+		draw_rect(r, INK, false, 2.0)
 
 	if _prompt_visible:
 		var pr := Rect2(_prompt.position - Vector2(14, 8), _prompt.size + Vector2(28, 16))

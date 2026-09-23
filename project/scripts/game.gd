@@ -109,6 +109,10 @@ var _start_flip: bool = false
 var roles := {Arch.Side.PLAYER: Arch.Role.STAFF, Arch.Side.NEMESIS: Arch.Role.STAFF}
 var stats := {Arch.Side.PLAYER: [1, 1, 1, 1], Arch.Side.NEMESIS: [1, 1, 1, 1]}
 var parties := {Arch.Side.PLAYER: [], Arch.Side.NEMESIS: []}
+## IT firewalls: [{room, owner, left}]. A walled room cannot be entered or
+## walked through by the side it is walled against, for [code]left[/code] of
+## that side's moves.
+var firewalls: Array = []
 
 
 func _ready() -> void:
@@ -217,16 +221,14 @@ func _apply_setup(cfg: Dictionary) -> void:
 
 ## The colleagues each side starts with, standing near their own end.
 func _spawn_parties() -> void:
-	var pp: Array = parties[Arch.Side.PLAYER]
-	for i in range(pp.size()):
-		var a := TAU * float(i) / float(pp.size())
-		_add_person(Arch.Kind.FOLLOWER, Arch.Side.PLAYER,
-			Office.DESK_CLUSTER + Vector3(cos(a) * 3.5, 0, sin(a) * 3.0 + 4.0), int(pp[i]))
-	var nq: Array = parties[Arch.Side.NEMESIS]
-	for i in range(nq.size()):
-		var a := TAU * float(i) / float(nq.size())
-		_add_person(Arch.Kind.FOLLOWER, Arch.Side.NEMESIS,
-			Office.BREAK_POS + Vector3(cos(a) * 3.5, 0, sin(a) * 3.0), int(nq[i]))
+	# They are pieces: each stands in a room, has morale, and has a job ability.
+	for side in [Arch.Side.PLAYER, Arch.Side.NEMESIS]:
+		for r in parties[side]:
+			var p := _add_person(Arch.Kind.FOLLOWER, side, board.room_pos(pos[side]), int(r))
+			p.unit = true
+			p.morale = Arch.MORALE_MAX
+			p.cooldown = 0
+			_park(p, pos[side])
 
 
 ## Is this job on this side - the presenter themselves, or anyone of it
@@ -256,6 +258,11 @@ func _place_for_round() -> void:
 	}
 	_snap_to(player, board.room_pos(pos[Arch.Side.PLAYER]))
 	_snap_to(nemesis, board.room_pos(pos[Arch.Side.NEMESIS]))
+	# Colleagues start the round with their presenter.
+	for side in [Arch.Side.PLAYER, Arch.Side.NEMESIS]:
+		for p in _units(side):
+			_park(p, pos[side])
+			p.global_position = p.home_pos + Vector3(0, 0.1, 0)
 	_refresh_plan()
 
 
@@ -270,14 +277,31 @@ func _reach(side: int) -> Dictionary:
 	return _reach_from(side, pos[side])
 
 
-func _reach_from(side: int, here: String) -> Dictionary:
-	var other := _other(side)
-	var d := board.distances(here, [pos[other]])
+func _reach_from(side: int, here: String, steps: int = -1) -> Dictionary:
+	var d := board.distances(here, _blocked_for(side))
+	var lim := _steps(side) if steps < 0 else steps
 	var out := {}
 	for id in d:
-		if int(d[id]) <= _steps(side):
+		if int(d[id]) <= lim:
 			out[id] = int(d[id])
 	return out
+
+
+## Rooms this side cannot enter or walk through: where the other presenter
+## stands, and any room the other side's IT has walled off.
+func _blocked_for(side: int) -> Array:
+	var out: Array = [pos[_other(side)]]
+	for w in firewalls:
+		if int(w["owner"]) != side and not out.has(w["room"]):
+			out.append(w["room"])
+	return out
+
+
+func _walled_against(side: int, room: String) -> bool:
+	for w in firewalls:
+		if int(w["owner"]) != side and w["room"] == room:
+			return true
+	return false
 
 
 func _refresh_plan() -> void:
@@ -286,6 +310,15 @@ func _refresh_plan() -> void:
 	floor_plan.you = pos[Arch.Side.PLAYER]
 	floor_plan.them = pos[Arch.Side.NEMESIS]
 	floor_plan.steps = _steps(Arch.Side.PLAYER)
+	var toks: Array = []
+	for side in [Arch.Side.PLAYER, Arch.Side.NEMESIS]:
+		for u in _units(side):
+			toks.append([u.room, side, Arch.ROLE_NAME[u.role].substr(0, 1), u.morale, u.cooldown <= 0])
+	floor_plan.units = toks
+	var walls := {}
+	for w in firewalls:
+		walls[w["room"]] = int(w["owner"])
+	floor_plan.walls = walls
 
 
 ## Apply the board to an option: out of reach is out of the question, and the
@@ -296,8 +329,11 @@ func _gate(side: int, opt: Dictionary, reach: Dictionary, here: String) -> Dicti
 	if room == pos[other]:
 		opt["enabled"] = false
 		opt["why"] = "your nemesis is standing there"
+	elif _walled_against(side, room):
+		opt["enabled"] = false
+		opt["why"] = "their IT has firewalled the %s" % board.room_name(room)
 	elif not reach.has(room):
-		var far := board.dist(here, room, [pos[other]])
+		var far := board.dist(here, room, _blocked_for(side))
 		opt["enabled"] = false
 		opt["why"] = ("%d steps away, you have %d" % [far, _steps(side)]) if far < 999 else "no way through - they are in the doorway"
 	else:
@@ -403,6 +439,12 @@ func _begin_round() -> void:
 	occupied = {Arch.Side.PLAYER: "", Arch.Side.NEMESIS: ""}
 	_presented = {Arch.Side.PLAYER: false, Arch.Side.NEMESIS: false}
 	sabotage_log = {Arch.Side.PLAYER: [], Arch.Side.NEMESIS: []}
+	firewalls.clear()
+	# A night's sleep: every colleague gets a point of morale back.
+	if round_no > 1:
+		for side in [Arch.Side.PLAYER, Arch.Side.NEMESIS]:
+			for u in _units(side):
+				u.morale = mini(u.morale + 1, Arch.MORALE_MAX)
 	# Everybody back to an end of the building for the round.
 	if round_no > 1:
 		_place_for_round()
@@ -524,7 +566,7 @@ func _station_id(st: Dictionary) -> String:
 ## [param from_room] evaluates the board as if the side stood there (for the
 ## one-move lookahead); [param lookahead] adds to each card what it opens up
 ## next move, so walking to the Lobby is worth what the Lobby is next to.
-func _options_for(side: int, from_room: String = "", lookahead: bool = true) -> Array:
+func _options_for(side: int, from_room: String = "", lookahead: bool = true, with_units: bool = true) -> Array:
 	var other: int = Arch.Side.NEMESIS if side == Arch.Side.PLAYER else Arch.Side.PLAYER
 	var demand := _demand(side)
 	var opts: Array = []
@@ -703,13 +745,24 @@ func _options_for(side: int, from_room: String = "", lookahead: bool = true) -> 
 		for o in opts:
 			if o.get("enabled", true) and o["kind"] != "present":
 				o["value"] = float(o["value"]) + 0.5 * _best_next(side, o["station"])
+
+	# Or move a colleague instead: one card per colleague, their best use of
+	# their ability from where they can walk this move.
+	# A colleague's move leaves you where you are, so it keeps the same "what
+	# next" the other cards are credited with: your best move from here.
+	if with_units and from_room == "":
+		var stay := 0.5 * _best_next(side, here) if lookahead else 0.0
+		for o in _unit_options(side):
+			if o.get("enabled", false):
+				o["value"] = float(o["value"]) + stay
+			opts.append(o)
 	return opts
 
 
 ## The best immediate value available next move from [param room].
 func _best_next(side: int, room: String) -> float:
 	var best := 0.0
-	for o in _options_for(side, room, false):
+	for o in _options_for(side, room, false, false):
 		if o.get("enabled", true) and o["kind"] != "present" and o["kind"] != "lobby":
 			best = maxf(best, float(o["value"]))
 	return best
@@ -734,7 +787,7 @@ func _buy_reach(side: int) -> float:
 ## What a desk visit at [param from] would do to the neutrals nearby:
 ## [newly curious about me, taken off the other side's list]. Same arithmetic
 ## as _warm_nearest, so the number on the card is the number that happens.
-func _warm_preview(from: Vector3, side: int) -> Array:
+func _warm_preview(from: Vector3, side: int, count: int = -1) -> Array:
 	var pool: Array[Person] = []
 	for p in people:
 		if p.kind == Arch.Kind.NEUTRAL:
@@ -743,7 +796,8 @@ func _warm_preview(from: Vector3, side: int) -> Array:
 		return a.global_position.distance_to(from) < b.global_position.distance_to(from))
 	var fresh := 0
 	var stolen := 0
-	for i in range(mini(Arch.WARM_COUNT + (1 if _has(side, Arch.Role.INTERN) else 0), pool.size())):
+	var n := count if count >= 0 else Arch.WARM_COUNT + (1 if _has(side, Arch.Role.INTERN) else 0)
+	for i in range(mini(n, pool.size())):
 		var q := pool[i]
 		if q.global_position.distance_to(from) > 16.0:
 			break
@@ -797,13 +851,18 @@ func _poach_targets(side: int, limit: int = 2) -> Array:
 			continue
 		var sid := _station_id(best_st)
 		var prop: Dictionary = satchel[side][card]
+		# A colleague of theirs has morale: a card shakes them, and only the
+		# card that takes their morale to nothing brings them over.
+		var shakes: bool = p.unit and p.morale > Arch.BUY_MORALE_HIT
+		var what := ("morale %d -> %d, comes over at 0" % [p.morale, p.morale - Arch.BUY_MORALE_HIT]) if shakes \
+			else ("comes over" + (" with their %s ability" % Arch.ABILITY[p.role][0] if p.unit else ""))
 		out.append({
 			"id": "poach:%s" % p.person_name, "kind": "poach", "station": sid, "pos": best_st["pos"],
 			"target": p, "card": card,
-			"label": "Buy %s" % p.person_name,
-			"sub": "%s, wants %s - spend your %s, at the %s" % [Arch.ROLE_NAME[p.role], Arch.TASTE_NAME[p.taste], prop["name"], best_st["label"].to_lower()],
+			"label": "%s %s" % ["Shake" if shakes else "Buy", p.person_name],
+			"sub": "%s, wants %s - spend your %s, at the %s; %s" % [Arch.ROLE_NAME[p.role], Arch.TASTE_NAME[p.taste], prop["name"], best_st["label"].to_lower(), what],
 			"enabled": occupied[other] != sid, "why": "your nemesis is standing there",
-			"value": 4.2,
+			"value": 1.6 if shakes else (4.8 if p.unit else 4.2),
 			"walk": from.distance_to(best_st["pos"]),
 		})
 	out.sort_custom(func(a, b): return a["walk"] < b["walk"])
@@ -837,7 +896,10 @@ func _player_move() -> void:
 func _execute(side: int, opt: Dictionary) -> void:
 	_busy = true
 	var room: String = opt["station"]
-	var route: Array = board.path(pos[side], room, [pos[_other(side)]])
+	if opt.has("unit"):
+		await _execute_unit(side, opt)
+		return
+	var route: Array = board.path(pos[side], room, _blocked_for(side))
 	if side == Arch.Side.PLAYER:
 		for i in range(route.size()):
 			planner.running(i + 1, route.size(), "%s…" % opt["label"])
@@ -879,6 +941,7 @@ func _execute(side: int, opt: Dictionary) -> void:
 			else:
 				hud.toast("They are in the Lobby.")
 	_tick_influencers(side)
+	_after_move(side, null)
 	_refresh_hud()
 	if side == Arch.Side.PLAYER and String(opt["kind"]) != "present":
 		await get_tree().create_timer(0.7).timeout
@@ -962,6 +1025,8 @@ func _act_break(side: int) -> void:
 	for p in people:
 		if p.side == side and Arch.flippable(p.kind):
 			p.resolve = true
+	for u in _units(side):
+		u.morale = mini(u.morale + 1, Arch.MORALE_MAX)
 
 	if side == Arch.Side.NEMESIS:
 		hud.toast("They rallied. Nobody of theirs can be bought this round.")
@@ -976,6 +1041,7 @@ func _act_heckler(side: int, target: Variant) -> void:
 	if q == null:
 		return
 	q.set_kind_side(Arch.Kind.HATER, side)
+	q.unit = false
 	if side == Arch.Side.PLAYER:
 		hud.toast("%s (%s) is off to heckle their talks." % [q.person_name, Arch.ROLE_NAME[q.role]])
 	else:
@@ -994,6 +1060,9 @@ func _heckler_pick(side: int) -> Person:
 		var cost := 1.0 if _rule_lost_without(side, p) else 0.0
 		if p.role == Arch.Role.STAFF:
 			cost -= 0.5
+		# A colleague on the board is a piece as well as a clap.
+		if p.unit:
+			cost += 0.75
 		if cost < best_cost:
 			best_cost = cost
 			best = p
@@ -1008,6 +1077,317 @@ func _rule_lost_without(side: int, who: Person) -> bool:
 		if p != who and p.side == side and p.role == who.role and Arch.claps(p.kind):
 			return false
 	return true
+
+
+# --- colleagues on the board -------------------------------------------------
+
+## The colleagues who are pieces for this side right now.
+func _units(side: int) -> Array[Person]:
+	var out: Array[Person] = []
+	for p in people:
+		if p.unit and p.side == side and Arch.claps(p.kind):
+			out.append(p)
+	return out
+
+
+## Stand a colleague in a room: where they go home to after a talk, and where
+## they walk from next time. Spread round the room so a crowd is not one block.
+func _park(p: Person, room: String) -> void:
+	p.room = room
+	var same := 0
+	for q in people:
+		if q != p and q.unit and q.room == room:
+			same += 1
+	var a := float(same) * 1.3 + (0.0 if p.side == Arch.Side.PLAYER else PI)
+	p.home_pos = board.room_pos(room) + Vector3(cos(a) * 2.2, 0, sin(a) * 2.2)
+	p.goto(p.home_pos)
+
+
+func _ability_name(role: int) -> String:
+	return str(Arch.ABILITY[role][0])
+
+
+## One card per colleague: the best thing their ability can do from any room
+## they can reach this move, or why they cannot act.
+func _unit_options(side: int) -> Array:
+	var out: Array = []
+	var other := _other(side)
+	# What the other side would most like to do in each room - what a firewall
+	# there would take away from them. Computed once, without their colleagues.
+	var their_best := {}
+	var needs_it := false
+	for u in _units(side):
+		if u.role == Arch.Role.IT and u.cooldown <= 0:
+			needs_it = true
+	if needs_it:
+		for o in _options_for(other, "", false, false):
+			if o.get("enabled", true) and o["kind"] != "present" and o["kind"] != "lobby":
+				var st: String = o["station"]
+				their_best[st] = maxf(float(their_best.get(st, 0.0)), float(o["value"]))
+
+	for u in _units(side):
+		var name := _ability_name(u.role)
+		var label := "%s (%s): %s" % [u.person_name, Arch.ROLE_NAME[u.role], name]
+		var card := {
+			"id": "unit:%s" % u.person_name, "kind": "ability", "unit": u, "group": "colleagues",
+			"station": u.room, "pos": board.room_pos(u.room), "label": label,
+			"sub": "", "enabled": false, "why": "", "value": 0.0,
+		}
+		if u.cooldown > 0:
+			card["why"] = "resting - ready in %d move%s" % [u.cooldown, "" if u.cooldown == 1 else "s"]
+			out.append(card)
+			continue
+		var here := u.room if u.room != "" else String(pos[side])
+		var reach := _reach_from(side, here, 0 if u.role == Arch.Role.HR else Arch.UNIT_STEPS)
+		var best := {}
+		for room in reach:
+			if _walled_against(side, room) or room == pos[other]:
+				continue
+			var e := _ability_at(side, u, room, their_best)
+			if e.is_empty():
+				continue
+			if best.is_empty() or float(e["value"]) > float(best["value"]):
+				best = e
+				best["room"] = room
+				best["steps"] = int(reach[room])
+		if best.is_empty():
+			card["why"] = "nothing for %s to do within %d steps" % [name, Arch.UNIT_STEPS]
+			out.append(card)
+			continue
+		var room: String = best["room"]
+		card["station"] = room
+		card["pos"] = board.room_pos(room)
+		card["target"] = best.get("target")
+		card["enabled"] = true
+		card["value"] = float(best["value"])
+		var walk := "  ·  here" if int(best["steps"]) == 0 else "  ·  walks %d to the %s" % [best["steps"], board.room_name(room)]
+		card["sub"] = "%s%s  ·  rests %d" % [best["sub"], walk, int(Arch.ABILITY[u.role][2])]
+		out.append(card)
+	return out
+
+
+## What colleague [param u]'s ability would do in [param room]: {value, sub,
+## target?}, or empty if nothing. Same numbers the nemesis reads.
+func _ability_at(side: int, u: Person, room: String, their_best: Dictionary) -> Dictionary:
+	var other := _other(side)
+	var at := board.room_pos(room)
+	match u.role:
+		Arch.Role.CEO, Arch.Role.INTERN:
+			var n := Arch.WARM_COUNT + 2 if u.role == Arch.Role.CEO else 2
+			var w := _warm_preview(at, side, n)
+			var healed := 0
+			if u.role == Arch.Role.INTERN:
+				for q in _units(side):
+					if q != u and q.room == room and q.morale < Arch.MORALE_MAX:
+						healed += 1
+			var v := 1.1 * float(w[0]) + 0.7 * float(w[1]) + 0.5 * float(healed)
+			if v <= 0.0:
+				return {}
+			var sub := "%d on the grass get curious" % w[0]
+			if w[1] > 0:
+				sub += ", %d taken off them" % w[1]
+			if healed > 0:
+				sub += ", +1 morale to %d here" % healed
+			return {"value": v, "sub": sub}
+		Arch.Role.ENGINEER:
+			if not room.begins_with("desk:"):
+				return {}
+			var taste: int = office.desk_tastes[int(room.split(":")[1])]
+			if taste < 0:
+				return {}
+			var d := _demand(side)
+			return {"value": float(d[taste]) + 0.8, "sub": "takes a %s card  ·  %d in the room want it" % [Arch.TASTE_NAME[taste], d[taste]]}
+		Arch.Role.IT:
+			var v: float = 0.6 * float(their_best.get(room, 0.0))
+			for w in firewalls:
+				if w["room"] == room and int(w["owner"]) == side:
+					return {}
+			if v < 0.5:
+				return {}
+			return {"value": v, "sub": "shuts the %s to them for %d of their moves" % [board.room_name(room), Arch.FIREWALL_MOVES]}
+		Arch.Role.HR:
+			var healed := 0
+			for q in _units(side):
+				if q.morale < Arch.MORALE_MAX:
+					healed += 1
+			var exposed := false
+			for q in _units(side):
+				if not q.resolve:
+					exposed = true
+			var v := 0.9 * float(healed) + (1.6 if exposed and _threatened(side) else 0.0)
+			if v <= 0.0:
+				return {}
+			return {"value": v, "sub": "+1 morale to %d colleague%s; nobody of yours can be bought this round" % [healed, "" if healed == 1 else "s"]}
+		Arch.Role.MARKETING:
+			var hit: Array[String] = []
+			var v := 0.0
+			for t in _smear_targets(other, room):
+				hit.append("%s %d->%d" % [t.person_name, t.morale, t.morale - 1])
+				v += 1.0 + (1.5 if t.morale <= 1 else 0.0)
+			if hit.is_empty():
+				return {}
+			return {"value": v, "sub": "-1 morale: %s" % ", ".join(hit)}
+		Arch.Role.SALES:
+			var n := 0
+			for q in people:
+				if q.is_curious_for(side) and q.global_position.distance_to(at) <= Arch.STREAM_RADIUS:
+					n += 1
+			n = mini(n, 2)
+			if n == 0:
+				return {}
+			return {"value": 2.4 * float(n), "sub": "wins %d curious about you near the %s" % [n, board.room_name(room)]}
+		Arch.Role.LEGAL:
+			var best: Person = null
+			var bv := 0.0
+			for t in _units(other):
+				if board.dist(room, t.room) > 1:
+					continue
+				var v := 1.0 + (0.8 if t.cooldown <= 0 else 0.0) + (1.5 if t.morale <= 1 else 0.0)
+				if v > bv:
+					bv = v
+					best = t
+			if best == null:
+				return {}
+			return {"value": bv, "target": best, "sub": "%s (%s): morale %d->%d, %s rests 2 more" % [
+				best.person_name, Arch.ROLE_NAME[best.role], best.morale, best.morale - 1, _ability_name(best.role)]}
+	return {}
+
+
+## Who a smear from [param room] lands on: the two shakiest of [param side]'s
+## colleagues within a step. Two, not everyone: a rumour needs a target.
+func _smear_targets(side: int, room: String) -> Array[Person]:
+	var near: Array[Person] = []
+	for t in _units(side):
+		if board.dist(room, t.room) <= 1:
+			near.append(t)
+	near.sort_custom(func(a, b): return a.morale < b.morale)
+	return near.slice(0, Arch.SMEAR_TARGETS)
+
+
+## A colleague's move: walk their route, then use the ability there.
+func _execute_unit(side: int, opt: Dictionary) -> void:
+	var u: Person = opt["unit"]
+	var room: String = opt["station"]
+	var route: Array = board.path(u.room, room, _blocked_for(side)) if u.room != room else []
+	for i in range(route.size()):
+		if side == Arch.Side.PLAYER:
+			planner.running(i + 1, route.size(), "%s…" % opt["label"])
+		await _walk_to(u, board.room_pos(route[i]), 5.0, true)
+	if side == Arch.Side.PLAYER:
+		planner.close()
+	_park(u, room)
+	_snap_to(u, u.home_pos)
+	_use_ability(side, u, room, opt.get("target"))
+	u.cooldown = int(Arch.ABILITY[u.role][2])
+	_tick_influencers(side)
+	_after_move(side, u)
+	_refresh_plan()
+	_refresh_hud()
+	if side == Arch.Side.PLAYER:
+		await get_tree().create_timer(0.7).timeout
+
+
+func _use_ability(side: int, u: Person, room: String, target: Variant) -> void:
+	var other := _other(side)
+	var at := board.room_pos(room)
+	var who := "%s (%s)" % [u.person_name, Arch.ROLE_NAME[u.role]]
+	var yours := side == Arch.Side.PLAYER
+	match u.role:
+		Arch.Role.CEO, Arch.Role.INTERN:
+			var n := Arch.WARM_COUNT + 2 if u.role == Arch.Role.CEO else 2
+			var warmed := _warm_nearest(at, n, Arch.WARM_AMOUNT, side)
+			var healed := 0
+			if u.role == Arch.Role.INTERN:
+				for q in _units(side):
+					if q != u and q.room == room and q.morale < Arch.MORALE_MAX:
+						q.morale += 1
+						healed += 1
+			hud.toast("%s%s: %d on the grass warmed%s." % ["" if yours else "Their ", who, warmed,
+				(", %d colleague%s perked up" % [healed, "" if healed == 1 else "s"]) if healed > 0 else ""])
+		Arch.Role.ENGINEER:
+			var taste: int = office.desk_tastes[int(room.split(":")[1])]
+			var names: Array = Arch.PROPS[taste]
+			var prop := {"taste": taste, "name": names[rng.randi() % names.size()]}
+			satchel[side].append(prop)
+			hud.toast("%s built a demo: %s." % [who, prop["name"]] if yours else "Their %s built a %s demo." % [who, Arch.TASTE_NAME[taste]])
+		Arch.Role.IT:
+			firewalls.append({"room": room, "owner": side, "left": Arch.FIREWALL_MOVES})
+			if yours:
+				hud.toast("%s firewalled the %s. They cannot get in for %d moves." % [who, board.room_name(room), Arch.FIREWALL_MOVES])
+			else:
+				hud.toast("Their %s firewalled the %s against you." % [who, board.room_name(room)])
+				sabotage_log[Arch.Side.PLAYER].append("%s walled off" % board.room_name(room))
+		Arch.Role.HR:
+			for q in _units(side):
+				q.morale = mini(q.morale + 1, Arch.MORALE_MAX)
+				q.resolve = true
+			for q in people:
+				if q.side == side and Arch.flippable(q.kind):
+					q.resolve = true
+			hud.toast(("%s held one-on-ones. Everyone +1 morale and nobody can be bought." % who) if yours else "Their %s held one-on-ones. Their people cannot be bought this round." % who)
+		Arch.Role.MARKETING:
+			var hit: Array[String] = []
+			for t in _smear_targets(other, room):
+				hit.append(t.person_name)
+				_hurt(t, 1)
+			hud.toast("%s%s smeared %s." % ["" if yours else "Their ", who, ", ".join(hit) if hit.size() > 0 else "nobody"])
+			if not yours and hit.size() > 0:
+				sabotage_log[Arch.Side.PLAYER].append("smear on %s" % ", ".join(hit))
+		Arch.Role.SALES:
+			var curious: Array[Person] = []
+			for q in people:
+				if q.is_curious_for(side) and q.global_position.distance_to(at) <= Arch.STREAM_RADIUS:
+					curious.append(q)
+			curious.sort_custom(func(a, b): return a.curiosity > b.curiosity)
+			var won := 0
+			for q in curious:
+				if won >= 2:
+					break
+				q.set_kind_side(Arch.Kind.FOLLOWER, side)
+				q.home_pos = at + Vector3(rng.randf_range(-3, 3), 0, rng.randf_range(-3, 3))
+				q.goto(q.home_pos)
+				won += 1
+			round_stats[side]["gained"] += won
+			hud.toast("%s%s closed %d at the %s." % ["" if yours else "Their ", who, won, board.room_name(room)])
+			_note_lead()
+		Arch.Role.LEGAL:
+			var t: Person = target as Person
+			if t == null or not t.unit or t.side != other:
+				return
+			t.cooldown += 2
+			hud.toast("%s%s served %s (%s) - %s rests 2 more." % ["" if yours else "Their ", who, t.person_name, Arch.ROLE_NAME[t.role], _ability_name(t.role)])
+			if not yours:
+				sabotage_log[Arch.Side.PLAYER].append("%s served" % t.person_name)
+			_hurt(t, 1)
+
+
+## Knock a colleague's morale. At nothing they walk out.
+func _hurt(t: Person, n: int) -> void:
+	t.morale -= n
+	if t.morale > 0:
+		return
+	var side := t.side
+	t.unit = false
+	t.set_kind_side(Arch.Kind.NEUTRAL, Arch.Side.NONE)
+	t.warm(Arch.CURIOUS_AT - 0.5)
+	t.home_pos = t.global_position + Vector3(rng.randf_range(-6, 6), 0, rng.randf_range(-6, 6))
+	t.goto(t.home_pos)
+	round_stats[side]["lost"] += 1
+	hud.toast("%s (%s) has had enough and walked out on %s." % [t.person_name, Arch.ROLE_NAME[t.role], "you" if side == Arch.Side.PLAYER else "them"])
+	_note_lead()
+
+
+## After any move by [param side]: its resting colleagues get a move closer to
+## ready, and walls against it wear down.
+func _after_move(side: int, used: Person) -> void:
+	for u in _units(side):
+		if u != used and u.cooldown > 0:
+			u.cooldown -= 1
+	for i in range(firewalls.size() - 1, -1, -1):
+		if int(firewalls[i]["owner"]) != side:
+			firewalls[i]["left"] = int(firewalls[i]["left"]) - 1
+			if int(firewalls[i]["left"]) <= 0:
+				firewalls.remove_at(i)
 
 
 # --- sabotage ----------------------------------------------------------------
@@ -1090,10 +1470,22 @@ func _act_poach(side: int, target: Person, card: int) -> void:
 		return
 	var prop: Dictionary = satchel[side][card]
 	satchel[side].remove_at(card)
+	if target.unit and target.morale > Arch.BUY_MORALE_HIT:
+		target.morale -= Arch.BUY_MORALE_HIT
+		if side == Arch.Side.PLAYER:
+			hud.toast("%s (%s) took the %s and wavered - morale %d." % [target.person_name, Arch.ROLE_NAME[target.role], prop["name"], target.morale])
+		else:
+			hud.toast("They offered %s a %s. Morale %d - one more and they go." % [target.person_name, Arch.TASTE_NAME[prop["taste"]], target.morale])
+		return
 	target.set_kind_side(Arch.Kind.FOLLOWER, side)
 	var home: Vector3 = _actor_pos(side) + Vector3(rng.randf_range(-2, 2), 0, rng.randf_range(-2, 2))
 	target.goto(home)
 	target.home_pos = home
+	if target.unit:
+		# Came over shaken, and their ability has to settle in first.
+		target.morale = 2
+		target.cooldown = int(Arch.ABILITY[target.role][2])
+		_park(target, pos[side])
 	round_stats[side]["gained"] += 1
 	var other: int = Arch.Side.NEMESIS if side == Arch.Side.PLAYER else Arch.Side.PLAYER
 	round_stats[other]["lost"] += 1
@@ -1191,8 +1583,8 @@ func _send_bullies() -> void:
 				hud.toast("%s goes to bully their talk from the front row." % b.person_name)
 
 
-func _walk_to(p: Person, target: Vector3, max_time: float = 12.0) -> void:
-	p.goto(target)
+func _walk_to(p: Person, target: Vector3, max_time: float = 12.0, hurry: bool = false) -> void:
+	p.goto(target, hurry)
 	var t := 0.0
 	while t < max_time:
 		await get_tree().process_frame
@@ -1300,6 +1692,13 @@ func _apply_talk(result: Dictionary) -> void:
 	# talk from being the end of the match.
 	for p in result["lost"]:
 		var q := p as Person
+		# A colleague is harder to shift: the bully costs them morale, and they
+		# only walk when it runs out.
+		if q.unit and q.morale > Arch.BULLY_MORALE_HIT:
+			q.morale -= Arch.BULLY_MORALE_HIT
+			hud.toast("%s (%s) was shaken by the bully - morale %d." % [q.person_name, Arch.ROLE_NAME[q.role], q.morale])
+			continue
+		q.unit = false
 		q.set_kind_side(Arch.Kind.NEUTRAL, Arch.Side.NONE)
 		# Warm, not curious: one desk visit away from being closable again, and
 		# not a free spectator for whoever presents next.
@@ -1312,7 +1711,9 @@ func _apply_talk(result: Dictionary) -> void:
 	round_stats[side]["claps"] += int(result["claps"])
 	round_stats[side]["boos"] += int(result["boos"])
 	round_stats[side]["gained"] += result["won"].size()
-	round_stats[side]["lost"] += result["lost"].size()
+	for p in result["lost"]:
+		if (p as Person).side != side:
+			round_stats[side]["lost"] += 1
 
 	var ratio: float = float(result["claps"]) / maxf(float(result["claps"] + result["boos"]), 1.0)
 	if ratio > 0.78 and int(result["claps"]) >= 20:

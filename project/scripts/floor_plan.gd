@@ -15,6 +15,10 @@ var reach: Dictionary = {}
 var you: String = ""
 var them: String = ""
 var steps: int = 0
+## Colleagues on the board: [room, side, initial, morale, ready].
+var units: Array = []
+## room -> side that walled it (IT firewall).
+var walls: Dictionary = {}
 
 const W := 300.0
 const H := 230.0
@@ -68,6 +72,13 @@ func _draw() -> void:
 			fill = Color(0.95, 0.85, 0.55, 0.95)
 		draw_rect(r, fill, true)
 		draw_rect(r, INK, false, 2.0)
+		if walls.has(id):
+			# A firewall: hatched, in the colour of whoever put it up.
+			var wc := Color("c4614f") if int(walls[id]) == Arch.Side.PLAYER else Color("5b7fa6")
+			for k in range(0, 60, 8):
+				var x0 := r.position.x + k
+				draw_line(Vector2(x0, r.end.y), Vector2(minf(x0 + 22.0, r.end.x), r.end.y - minf(22.0, r.end.x - x0)), wc, 2.0)
+			draw_rect(r, wc, false, 3.0)
 		var label: String = board.rooms[id]["short"]
 		draw_string(font, r.position + Vector2(5, 15), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, INK)
 		if reach.has(id) and id != you:
@@ -82,5 +93,22 @@ func _draw() -> void:
 		var c := _pt(them) + Vector2(20, -16)
 		draw_circle(c, 7.0, Color("5b7fa6"))
 		draw_arc(c, 7.0, 0, TAU, 16, INK, 2.0)
+
+	# Colleagues: small tokens along the bottom edge of their room, a letter for
+	# the job, ringed thick when their ability is ready; a pip per morale.
+	var per_room := {}
+	for t in units:
+		var id: String = t[0]
+		if not board.rooms.has(id):
+			continue
+		var k: int = int(per_room.get(id, 0))
+		per_room[id] = k + 1
+		var c := _pt(id) + Vector2(-22 + k * 11, 17)
+		var col := Color("c4614f") if int(t[1]) == Arch.Side.PLAYER else Color("5b7fa6")
+		draw_circle(c, 5.5, col.lightened(0.35))
+		draw_arc(c, 5.5, 0, TAU, 12, INK, 2.2 if bool(t[4]) else 1.0)
+		draw_string(font, c + Vector2(-3, 3.5), str(t[2]), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, INK)
+		for m in range(int(t[3])):
+			draw_rect(Rect2(c + Vector2(-4 + m * 3, 7), Vector2(2, 2)), INK, true)
 
 	draw_string(font, Vector2(8, H - 8), "%d steps a move" % steps if steps > 0 else "", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.13, 0.11, 0.18, 0.7))

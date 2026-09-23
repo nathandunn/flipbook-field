@@ -30,6 +30,7 @@ var errors := 0
 var t0 := 0.0
 var last_phase := -1
 var scrolled_for := {}
+var clip_tries := {}
 var sold_once := false
 
 func _initialize() -> void:
@@ -53,6 +54,17 @@ func _buttons(n: Node, out: Array) -> void:
 func _click(b: Button) -> void:
 	var p: Vector2 = b.get_global_rect().get_center()
 	var vp: Vector2 = root.get_visible_rect().size
+	# A row clipped by its scroll area is on the window but not clickable:
+	# the click would land on whatever is drawn there. Scroll to it first.
+	var clip := b.get_parent().get_parent() as ScrollContainer
+	if clip and not clip.get_global_rect().has_point(p):
+		clip.ensure_control_visible(b)
+		last_click_frame = frames
+		if int(clip_tries.get(b, 0)) < 3:
+			clip_tries[b] = int(clip_tries.get(b, 0)) + 1
+			return
+		print("CLIPPED BUTTON: %s" % b.text)
+		errors += 1
 	if not (p.x >= 0 and p.y >= 0 and p.x <= vp.x and p.y <= vp.y):
 		# Inside a scroll area the row may be clipped; scroll it into view and
 		# take the centre again. Still off the window is a real layout bug.

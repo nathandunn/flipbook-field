@@ -164,9 +164,13 @@ func _desks() -> void:
 		for c in range(cols):
 			var p := DESK_CLUSTER + Vector3((c - 1) * 4.6, 0, (r - 0.5) * 4.4)
 			p += Vector3(rng.randf_range(-0.5, 0.5), 0, rng.randf_range(-0.5, 0.5))
-			_desk(p, rng.randf_range(-0.3, 0.3))
 			# The first four desks are one per taste; the rest are mixed.
 			var taste: int = i if i < 4 else -1
+			var node := _desk(p, rng.randf_range(-0.3, 0.3), taste)
+			if taste >= 0:
+				_dress_desk(node, taste)
+			else:
+				_hot_desk_sign(node)
 			var label: String = ("%s desk" % Arch.TASTE_NAME[taste]) if taste >= 0 else "Desk — a bit of everything"
 			desk_points.append(p + Vector3(0, 0, 1.9))
 			desk_tastes.append(taste)
@@ -176,7 +180,7 @@ func _desks() -> void:
 			i += 1
 
 
-func _desk(at: Vector3, yaw: float) -> void:
+func _desk(at: Vector3, yaw: float, taste: int = -1) -> Node3D:
 	var node := Node3D.new()
 	node.name = "Desk"
 	node.position = at
@@ -184,7 +188,7 @@ func _desk(at: Vector3, yaw: float) -> void:
 	add_child(node)
 
 	var wood := Ink.mat(Ink.BARK.lerp(Ink.DIRT, rng.randf_range(0.0, 0.3)))
-	var slate := Ink.mat(Color("6e7378"))
+	var slate := Ink.mat(Color("6e7378").lerp(Arch.TASTE_COLOR[taste], 0.55) if taste >= 0 else Color("6e7378"))
 
 	# Slab top on two stump legs.
 	_box(node, Vector3(2.4, 0.16, 1.2), Vector3(0, 0.78, 0), Ink.mat(Ink.STONE.lerp(Ink.DIRT, 0.25)))
@@ -209,6 +213,97 @@ func _desk(at: Vector3, yaw: float) -> void:
 	# Stump chair with a slab of bark for a back.
 	_cyl(node, 0.42, 0.44, 0.5, Vector3(0, 0.25, 1.25), wood, 8)
 	_box(node, Vector3(0.8, 0.5, 0.1), Vector3(0, 0.75, 1.62), wood)
+	return node
+
+
+## What makes a desk that desk: a rug and a painted sign in its colour, and
+## the stuff that taste is made of piled on the slab.
+func _dress_desk(node: Node3D, taste: int) -> void:
+	var col: Color = Arch.TASTE_COLOR[taste]
+	var ink := Ink.mat(col)
+	var pale := Ink.mat(col.lerp(Ink.PAPER, 0.45), 0.0)
+	var wood := Ink.mat(Ink.BARK)
+
+	# A woven mat under the whole desk, readable from across the field.
+	_box(node, Vector3(3.6, 0.04, 3.4), Vector3(0, 0.02, 0.45), pale)
+
+	# The sign: a plank on two poles behind the desk, lettered.
+	for sx in [-1.0, 1.0]:
+		_cyl(node, 0.06, 0.07, 2.9, Vector3(sx, 1.45, -0.95), wood, 6)
+	_box(node, Vector3(2.3, 0.62, 0.08), Vector3(0, 2.55, -0.95), ink)
+	var sign := Label3D.new()
+	sign.text = Arch.TASTE_NAME[taste].to_upper()
+	sign.font_size = 96
+	sign.pixel_size = 0.0055
+	sign.outline_size = 18
+	sign.modulate = Ink.PAPER
+	sign.outline_modulate = Ink.INK
+	sign.position = Vector3(0, 2.55, -0.9)
+	node.add_child(sign)
+
+	match taste:
+		Arch.Taste.DATA:
+			# A bar chart in stone, and a stack of tablets.
+			for k in range(3):
+				var h := 0.18 + 0.16 * k
+				_box(node, Vector3(0.14, h, 0.14), Vector3(0.5 + 0.18 * k, 0.86 + h * 0.5, -0.05), ink)
+			for k in range(3):
+				_box(node, Vector3(0.5, 0.05, 0.36), Vector3(-0.75, 0.89 + 0.055 * k, 0.1), Ink.mat(Ink.STONE.darkened(0.1 * k)))
+		Arch.Taste.STORY:
+			# A pile of books and a feather quill.
+			var covers := [col, Color("6b5a3a"), col.lerp(Ink.PAPER, 0.3), Color("4a5a6a")]
+			for k in range(4):
+				var b := _box(node, Vector3(0.46, 0.09, 0.34), Vector3(-0.7, 0.9 + 0.095 * k, 0.1), Ink.mat(covers[k]))
+				b.rotation.y = 0.25 * (k % 2) - 0.12
+			var quill := _box(node, Vector3(0.04, 0.5, 0.02), Vector3(0.7, 1.1, 0.15), Ink.mat(Ink.PAPER))
+			quill.rotation.z = -0.5
+		Arch.Taste.GADGET:
+			# A cog lying on the slab, and a twig antenna with a bulb on top.
+			_cyl(node, 0.24, 0.24, 0.07, Vector3(-0.7, 0.9, 0.1), ink, 12)
+			for k in range(8):
+				var a := TAU * float(k) / 8.0
+				var tooth := _box(node, Vector3(0.1, 0.07, 0.08), Vector3(-0.7 + cos(a) * 0.29, 0.9, 0.1 + sin(a) * 0.29), ink)
+				tooth.rotation.y = -a
+			_cyl(node, 0.025, 0.03, 0.9, Vector3(0.8, 1.3, -0.1), wood, 5)
+			_ball(node, 0.11, Vector3(0.8, 1.8, -0.1), Ink.mat(col.lightened(0.35)))
+		Arch.Taste.SNACK:
+			# A basket of fruit and a jar of acorns.
+			_cyl(node, 0.34, 0.26, 0.2, Vector3(-0.65, 0.96, 0.1), wood, 9)
+			var fruit := [Color("b8452f"), Color("d98a2b"), Color("c9b43a"), Color("b8452f"), Color("7a9a3a")]
+			for k in range(5):
+				var a := TAU * float(k) / 5.0
+				_ball(node, 0.1, Vector3(-0.65 + cos(a) * 0.14, 1.1, 0.1 + sin(a) * 0.14), Ink.mat(fruit[k]))
+			_cyl(node, 0.12, 0.12, 0.26, Vector3(0.75, 0.99, 0.15), Ink.mat(Color("c9c2a8").lerp(col, 0.2)), 8)
+
+
+## The two spare desks are not rooms on the board: say so, plainly.
+func _hot_desk_sign(node: Node3D) -> void:
+	var wood := Ink.mat(Ink.BARK)
+	_cyl(node, 0.05, 0.06, 1.7, Vector3(1.05, 0.85, -0.7), wood, 6)
+	_box(node, Vector3(1.1, 0.34, 0.06), Vector3(1.05, 1.62, -0.7), Ink.mat(Ink.STONE))
+	var sign := Label3D.new()
+	sign.text = "HOT DESK"
+	sign.font_size = 64
+	sign.pixel_size = 0.004
+	sign.outline_size = 12
+	sign.modulate = Ink.INK
+	sign.outline_modulate = Ink.PAPER
+	sign.position = Vector3(1.05, 1.62, -0.66)
+	node.add_child(sign)
+
+
+func _ball(parent: Node3D, r: float, at: Vector3, mat: Material) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = r
+	sm.height = r * 2.0
+	sm.radial_segments = 8
+	sm.rings = 4
+	mi.mesh = sm
+	mi.position = at
+	mi.material_override = mat
+	parent.add_child(mi)
+	return mi
 
 
 # --- break room --------------------------------------------------------------

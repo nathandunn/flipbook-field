@@ -119,6 +119,14 @@ func _side_lines(side: int, out: Array) -> void:
 			tags.append("shielded")
 		out.append(["● %s  ·  %s  ·  wants %s%s" % [p.person_name, Arch.ROLE_NAME[p.role],
 			Arch.TASTE_NAME[p.taste], ("  ·  " + ", ".join(tags)) if tags.size() > 0 else ""], 13, INK])
+		if p.unit:
+			var hearts := ""
+			for m in range(Arch.MORALE_MAX):
+				hearts += "♥" if m < p.morale else "♡"
+			var ab: Array = Arch.ABILITY[p.role]
+			out.append(["     %s  in the %s  ·  %s: %s" % [hearts, game.board.room_name(p.room), ab[0],
+				"ready" if p.cooldown <= 0 else "rests %d more" % p.cooldown], 12, INK.lightened(0.15)])
+			out.append(["     %s" % ab[1], 11, SOFT])
 		if p.role == Arch.Role.STAFF:
 			out.append(["     no job rule - one clap, one body", 11, SOFT])
 		elif seen.has(p.role):

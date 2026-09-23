@@ -102,11 +102,20 @@ func _ask_slide() -> void:
 	_refresh_tally()
 	_clear_buttons()
 
-	# A pinched hand can run long; show the five the room most wants, so the
-	# panel fits a short window and the choice stays a choice.
+	# A long hand (pinches, demos) would run off a short window. Two cards of
+	# one taste land the same, so offer one of each taste, most wanted first,
+	# at most four: the panel fits and the choice stays a choice.
 	var order: Array = range(_props.size())
 	order.sort_custom(func(a, b): return _wanting(_props[a]["taste"]) > _wanting(_props[b]["taste"]))
-	for i in order.slice(0, 5):
+	var shown: Array = []
+	var seen := {}
+	for i in order:
+		var t: int = int(_props[i]["taste"])
+		if seen.has(t):
+			continue
+		seen[t] = true
+		shown.append(i)
+	for i in shown.slice(0, 4):
 		var p: Dictionary = _props[i]
 		var want := _wanting(p["taste"])
 		var b := _button("%s  —  %s   (%d in the crowd want %s)" % [

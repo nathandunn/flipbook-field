@@ -73,6 +73,39 @@ they swap every round. Each side's card values include one move of lookahead
 to the Lobby worth doing and what stops the nemesis rallying in the Break room
 four times because nothing else was in range.
 
+## Your colleagues are pieces
+
+The four you picked are on the board, not just in the crowd. **A move is one
+piece**: you, or one colleague. A colleague walks up to two steps and uses
+their job's ability, which then rests for a few of your moves. The planner
+lists your cards first, then one card per colleague — their best use of the
+ability from where they can reach — then everything that cannot be played this
+move, greyed with the reason.
+
+| Colleague | ability | rests |
+|---|---|---|
+| **CEO** | All-hands: warms the five nearest on the grass toward you | 3 |
+| **Engineer** | Demo: at a desk, takes a card of that desk's taste | 3 |
+| **IT** | Firewall: shuts a room to them — presenter and colleagues — for two of their moves | 3 |
+| **HR** | One-on-ones: +1 morale to every colleague; nobody of yours can be bought this round | 2 |
+| **Marketing** | Smear: −1 morale to two of their colleagues within a step, shakiest first | 2 |
+| **Sales** | Close: wins up to two near the room who are curious about you | 3 |
+| **Legal** | Cease and desist: −1 morale to one of theirs within a step; their ability rests two more | 2 |
+| **Intern** | Coffee run: warms the two nearest; +1 morale to colleagues in the room | 2 |
+
+**Morale is health**, three each. A card spent on one of their colleagues
+knocks two off (*Shake*) and only the card that empties it brings them over
+(*Buy*), shaken, with their ability resting. A bully at a talk knocks two off
+instead of taking them outright. At nothing a colleague walks out — back to
+the grass, warm — and their job's rule goes with them. Morale comes back one a
+round, one from a Break-room rally, and from HR and the Intern.
+
+The roster shows each colleague's hearts, room and whether their ability is
+ready; the floor plan shows them as lettered tokens in their rooms (ringed
+thick when ready) and hatches a firewalled room in the colour of whoever put
+it up. Colleague cards carry the same "what next" lookahead as yours — you
+stay where you are, so it is your best move from here.
+
 ## The match, as a board game
 
 The first version played like two games of solitaire compared at the end: four
@@ -109,7 +142,10 @@ reason. The character walks the move on the board while you watch.
 
 ## The moves
 
-- **Desk** (one per taste) — take a card of that taste. Also warms the three
+- **Desk** (one per taste) — take a card of that taste. Each desk wears it: a
+  rug and a painted sign in its colour, and its stuff on the slab (a stone bar
+  chart, a pile of books, a cog and an antenna, a fruit basket). The two plain
+  ones are hot desks, not rooms. Also warms the three
   nearest neutrals toward you. Interest is a tug of war: warming somebody the
   other side has been courting wears their interest down first, then starts them
   on you. The card says how many it wins over and how many it steals.
@@ -219,7 +255,7 @@ the underdog seat. Nothing about balance lives in behaviour code.
   desks carry the four tastes.
 - `scripts/planner.gd` — the cards. Pure UI; it draws what it is handed and
   reports which row was pressed.
-- `scripts/game.gd` — the move loop, `_options_for` (the one list that feeds both
+- `scripts/game.gd` — the move loop, `_options_for` and `_unit_options` (the one list that feeds both
   the player's cards and the nemesis's choice, so the AI can never do something
   you could not), the verbs, the talks, scoring.
 - `scripts/presentation.gd` — the talk, the hecklers, the scoreboards.

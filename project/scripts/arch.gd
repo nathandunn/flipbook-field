@@ -29,6 +29,15 @@ const TASTE_NAME := {
 	Taste.SNACK: "Snacks",
 }
 
+## Each desk wears its taste: a rug, a painted sign and a tinted monitor in
+## this colour. Printed-ink values, never fully saturated.
+const TASTE_COLOR := {
+	Taste.DATA: Color("4f8a8b"),
+	Taste.STORY: Color("9a5070"),
+	Taste.GADGET: Color("b8942f"),
+	Taste.SNACK: Color("c8683a"),
+}
+
 ## Props are named after what you'd actually find lying around an office made of
 ## trees. The name is cosmetic; the taste is what the crowd reacts to.
 const PROPS := {
@@ -200,6 +209,36 @@ const ROLE_STATS := {
 	Role.HR: [1, 0, 1, 2], Role.MARKETING: [2, 2, 0, 0], Role.SALES: [2, 0, 2, 0],
 	Role.LEGAL: [0, 2, 0, 2], Role.INTERN: [1, 0, 3, 0], Role.STAFF: [1, 1, 1, 1],
 }
+## --- colleagues as units ------------------------------------------------------
+## Your party are pieces on the board. A move is one piece: you, or one
+## colleague, who walks up to UNIT_STEPS and uses their job's ability. The
+## ability then rests for its cooldown (counted in your own moves).
+const UNIT_STEPS := 2
+## Morale is a colleague's health. Knocked to zero, they walk out - back to the
+## grass, warm - and their job's rule goes with them.
+const MORALE_MAX := 3
+## A card spent on a colleague of theirs knocks this much morale; they only
+## come over when it runs out.
+const BUY_MORALE_HIT := 2
+## A bully who picks on a colleague at a talk knocks this much.
+const BULLY_MORALE_HIT := 2
+## A smear lands on this many of their colleagues within a step, shakiest first.
+const SMEAR_TARGETS := 2
+## How many of the other side's moves an IT firewall keeps a room shut.
+const FIREWALL_MOVES := 2
+## [name, what it does, cooldown in your moves]
+const ABILITY := {
+	Role.CEO: ["All-hands", "warms the 5 nearest on the grass toward you", 3],
+	Role.ENGINEER: ["Demo", "at a desk: takes a card of that desk's taste", 3],
+	Role.IT: ["Firewall", "shuts a room to them - presenter and colleagues - for 2 of their moves", 3],
+	Role.HR: ["One-on-ones", "+1 morale to every colleague; nobody of yours can be bought this round", 2],
+	Role.MARKETING: ["Smear", "-1 morale to two of their colleagues within a step, shakiest first", 2],
+	Role.SALES: ["Close", "wins up to 2 near the room who are curious about you", 3],
+	Role.LEGAL: ["Cease and desist", "-1 morale to one of theirs within a step, and their ability rests 2 more moves", 2],
+	Role.INTERN: ["Coffee run", "warms the 2 nearest on the grass; +1 morale to colleagues in the room", 2],
+	Role.STAFF: ["", "", 0],
+}
+
 ## Jobs you can play and recruit; Staff is the anonymous crowd.
 const PLAYABLE := [Role.CEO, Role.ENGINEER, Role.IT, Role.HR, Role.MARKETING, Role.SALES, Role.LEGAL, Role.INTERN]
 ## How common each job is among the neutrals on the grass.

@@ -34,6 +34,12 @@ var face_index: int = -1
 ## The job, which is the costume, the taste and the rule. See Arch.Role.
 var role: int = Arch.Role.STAFF
 var home_pos := Vector3.ZERO
+## A colleague who is a piece on the board (see Arch.ABILITY): the room they
+## stand in, their morale, and moves until their ability is ready again.
+var unit: bool = false
+var room: String = ""
+var morale: int = 0
+var cooldown: int = 0
 
 var _target: Vector3 = Vector3.INF
 var _hurry: bool = false

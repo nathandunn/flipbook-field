@@ -72,14 +72,48 @@ func offer(round_no: int, move_no: int, moves: int, opts: Array, hand_line: Stri
 	_title.text = "Round %d  ·  move %d of %d" % [round_no, move_no, moves]
 	_sub.text = hand_line
 	_clear()
+	# Playable cards first - yours, then your colleagues' - and everything that
+	# cannot be played this move folded to the bottom, so a short window shows
+	# the choice rather than the list of what is blocked.
+	var mine: Array = []
+	var theirs: Array = []
+	var off: Array = []
 	for o in opts:
-		var text: String = "%s   —   %s" % [o["label"], o["sub"]]
 		if not o.get("enabled", true):
-			text = "%s   —   %s" % [o["label"], o.get("why", "not now")]
-		var b := _button(text, o.get("enabled", true))
-		if o.get("enabled", true):
-			b.pressed.connect(_pick.bind(o))
-	_hint.text = "A card can be a slide at the rock, or spent to buy somebody who wants it."
+			off.append(o)
+		elif o.get("group", "") == "colleagues":
+			theirs.append(o)
+		else:
+			mine.append(o)
+	for o in mine:
+		_card_row(o)
+	if not theirs.is_empty():
+		_heading("- or move one colleague instead -")
+		for o in theirs:
+			_card_row(o)
+	if not off.is_empty():
+		_heading("- not this move -")
+		for o in off:
+			_card_row(o)
+	_hint.text = "One piece a move: you, or one colleague. A card can be a slide at the rock, or spent to buy somebody who wants it."
+
+
+func _card_row(o: Dictionary) -> void:
+	var text: String = "%s   —   %s" % [o["label"], o["sub"]]
+	if not o.get("enabled", true):
+		text = "%s   —   %s" % [o["label"], o.get("why", "not now")]
+	var b := _button(text, o.get("enabled", true))
+	if o.get("enabled", true):
+		b.pressed.connect(_pick.bind(o))
+
+
+func _heading(text: String) -> void:
+	var h := Label.new()
+	h.text = text
+	h.add_theme_font_size_override("font_size", 13)
+	h.add_theme_color_override("font_color", Color(0.13, 0.11, 0.18, 0.75))
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_box.add_child(h)
 
 
 func _pick(o: Dictionary) -> void:
