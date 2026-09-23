@@ -54,6 +54,22 @@ harder and your tricks are worth more. Hustle: buy from further away, walk
 faster. Grit: boo pressure at your talk −4 a point, and an ignored heckle costs
 less. Each job starts somewhere on these; the four free points are yours.
 
+## The board
+
+The office is a Clue board: rooms joined by corridors, drawn in the top-right
+corner. A move is **walk up to N steps, then act where you stand**. Two steps
+a move, plus one for every two points of Hustle. The Rock is two steps from
+the Lobby and four from the Data desk; a room the other side is standing in
+cannot be entered *or walked through*, so standing in a doorway is a move.
+Every card says how many steps it costs, and the ones out of reach say how
+far they are. The Lobby is a pure move — no action, one step from everything.
+
+Rounds open with one side by the Stream and the other in the Break room, and
+they swap every round. Each side's card values include one move of lookahead
+(half the best thing the room puts within reach), which is what makes walking
+to the Lobby worth doing and what stops the nemesis rallying in the Break room
+four times because nothing else was in range.
+
 ## The match, as a board game
 
 The first version played like two games of solitaire compared at the end: four
@@ -179,11 +195,11 @@ after the redesign:
 
 | | greedy vs nemesis | random vs nemesis |
 |---|---|---|
-| wins / ties / losses | 14 / 9 / 9 (32 matches, random jobs and parties) | 1 / 0 / 11 |
-| mean margin | 1.5 people | 4.9 people |
-| lead changes per match | 0.6 | 0.25 |
-| decisions per match | ~26 | ~22 |
-| cards blocked by the other side | 19% | 21% |
+| wins / ties / losses | 15 / 6 / 11 (32 matches, random jobs and parties) | 0 / 0 / 8 |
+| mean margin | 1.9 people | 6.0 people |
+| lead changes per match | 0.55 | 0.25 |
+| decisions per match | ~29 | ~24 |
+| cards out of reach or blocked | 33% | 36% |
 
 Which is what a fair two-player game looks like from the outside: level against
 an equal, punished for playing at random, and the lead moving during the match.
@@ -207,6 +223,8 @@ the underdog seat. Nothing about balance lives in behaviour code.
 - `scripts/person.gd` — one figure: archetype, job, curiosity and who it is
   for, walking. `warm_rule` is the tug of war, as a pure function.
 - `scripts/setup.gd` — the job / stats / party screen. Pure UI.
+- `scripts/board.gd` — the rooms, the corridors, Dijkstra. `scripts/floor_plan.gd`
+  draws it.
 - `scripts/block_figure.gd` — the paper doll. `art/bodygen.py` draws what it wears.
 - `materials/toon_base.tres` — restyles the whole scene at once.
 

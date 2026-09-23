@@ -27,6 +27,9 @@ var _title: Label
 var _sub: Label
 var _hint: Label
 var _box: VBoxContainer
+## The rows scroll when there are more cards than window: a phone in
+## landscape gets the same cards as a desktop, just with a thumb involved.
+var _scroll: ScrollContainer
 var _panel_rect := Rect2()
 
 
@@ -40,9 +43,13 @@ func _ready() -> void:
 	_hint = _label(14, Color(0.13, 0.11, 0.18, 0.70))
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
+	_scroll = ScrollContainer.new()
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(_scroll)
 	_box = VBoxContainer.new()
 	_box.add_theme_constant_override("separation", 6)
-	add_child(_box)
+	_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.add_child(_box)
 
 
 func _label(size: int, col: Color) -> Label:
@@ -125,8 +132,8 @@ func _clear() -> void:
 func _button(text: String, enabled: bool) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.add_theme_font_size_override("font_size", 14)
-	b.custom_minimum_size = Vector2(560, 30)
+	b.add_theme_font_size_override("font_size", 13)
+	b.custom_minimum_size = Vector2(560, 26)
 	b.focus_mode = Control.FOCUS_NONE
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.disabled = not enabled
@@ -150,7 +157,7 @@ func _card(fill: Color, left: int = 16) -> StyleBoxFlat:
 	sb.set_border_width_all(3)
 	# Kept tight: with the tricks on the table this can be fifteen rows, and
 	# they all have to fit a short browser window.
-	sb.set_content_margin_all(4)
+	sb.set_content_margin_all(3)
 	sb.content_margin_left = left
 	return sb
 
@@ -191,10 +198,12 @@ func _process(_delta: float) -> void:
 	_sub.position = Vector2(x, y)
 	y += _sub.size.y + 8
 
-	_box.position = Vector2(x, y)
-	_box.size = Vector2(_panel_rect.size.x - pad * 2.0, 0)
+	# The scroll area gets whatever is left between the header and the hint.
+	var avail: float = _panel_rect.end.y - pad - foot - y
+	_scroll.position = Vector2(x, y)
+	_scroll.size = Vector2(_panel_rect.size.x - pad * 2.0, maxf(avail, 30.0))
 	for c in _box.get_children():
-		(c as Control).custom_minimum_size.x = _panel_rect.size.x - pad * 2.0
+		(c as Control).custom_minimum_size.x = _panel_rect.size.x - pad * 2.0 - 12.0
 
 	_hint.size = Vector2(_panel_rect.size.x - pad * 2.0, 22)
 	_hint.position = Vector2(x, _panel_rect.end.y - pad - 16.0)

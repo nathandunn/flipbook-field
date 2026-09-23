@@ -30,6 +30,7 @@ var last_click_frame := -100
 var errors := 0
 var t0 := 0.0
 var last_phase := -1
+var scrolled_for := {}
 
 func _initialize() -> void:
 	policy = OS.get_environment("POLICY") if OS.get_environment("POLICY") != "" else "greedy"
@@ -53,6 +54,15 @@ func _click(b: Button) -> void:
 	var p: Vector2 = b.get_global_rect().get_center()
 	var vp: Vector2 = root.get_visible_rect().size
 	if not (p.x >= 0 and p.y >= 0 and p.x <= vp.x and p.y <= vp.y):
+		# Inside a scroll area the row may be clipped; scroll it into view and
+		# take the centre again. Still off the window is a real layout bug.
+		var sc := b.get_parent().get_parent() as ScrollContainer
+		if sc and not scrolled_for.has(b):
+			scrolled_for[b] = true
+			sc.ensure_control_visible(b)
+			# The container re-sorts next frame; come back for the click then.
+			last_click_frame = frames
+			return
 		print("OFFSCREEN BUTTON: %s %s" % [b.text, str(b.get_global_rect())])
 		errors += 1
 	for down in [true, false]:
@@ -135,6 +145,18 @@ func _process(_d: float) -> bool:
 				poach_offered += 1
 		var btns: Array = []
 		_buttons(pl._box, btns)
+		# The planner's rows were built when the move was offered; people keep
+		# walking, so a card can appear or vanish since. Choose only among the
+		# rows that are actually on the table.
+		var on_table: Array = []
+		for o in enabled:
+			for b in btns:
+				if (b as Button).text.begins_with(o["label"]):
+					on_table.append(o)
+					break
+		enabled = on_table
+		if enabled.is_empty():
+			return false
 		var choice: Dictionary = {}
 		if policy == "manual" and not manual_done_once:
 			manual_done_once = true

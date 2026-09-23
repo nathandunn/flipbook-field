@@ -95,6 +95,14 @@ var talk_cam: Camera3D
 
 var planner: Planner
 var setup: Setup
+## The Clue board: rooms and corridors over the office, and where each
+## presenter is standing on it. A move is "walk up to N steps, then act".
+var board: Board
+var floor_plan: FloorPlan
+var pos := {Arch.Side.PLAYER: "lobby", Arch.Side.NEMESIS: "break"}
+## A coin at the start of the match decides who opens by the Stream; it
+## swaps every round, so over three rounds one side gets it twice.
+var _start_flip: bool = false
 ## Who each side is: a job, four stats (charm, guile, hustle, grit), and the
 ## colleagues they started with. See Arch.Role.
 var roles := {Arch.Side.PLAYER: Arch.Role.STAFF, Arch.Side.NEMESIS: Arch.Role.STAFF}
@@ -140,6 +148,12 @@ func _ready() -> void:
 	setup.name = "Setup"
 	$UI.add_child(setup)
 
+	board = Board.from_office(office)
+	floor_plan = FloorPlan.new()
+	floor_plan.name = "FloorPlan"
+	floor_plan.board = board
+	$UI.add_child(floor_plan)
+
 	hud.set_hint(
 		"Pick a card each move, or Play it myself · WASD move · Shift run · E act · Esc free mouse"
 	)
@@ -162,6 +176,11 @@ func _apply_setup(cfg: Dictionary) -> void:
 	parties[Arch.Side.PLAYER] = Array(cfg["party"])
 	player.dress(roles[Arch.Side.PLAYER])
 	player.auto_speed = 4.4 * (1.0 + 0.08 * float(stats[Arch.Side.PLAYER][2]))
+	_start_flip = rng.randi() % 2 == 0
+	_place_for_round()
+	floor_plan.visible = true
+	floor_plan.steps = _steps(Arch.Side.PLAYER)
+	_refresh_plan()
 
 	# The nemesis is dealt the same way: a job, the same free points, as many
 	# colleagues as you took. Different picks, equal means.
@@ -220,6 +239,65 @@ func _stat(side: int, i: int) -> int:
 	return int(stats[side][i])
 
 
+## Start of a round: one side by the Stream, the other in the Break room,
+## and they swap each round so neither end is anyone's for long.
+func _place_for_round() -> void:
+	var swap := (round_no % 2 == 0) != _start_flip
+	pos = {
+		Arch.Side.PLAYER: "break" if swap else "stream",
+		Arch.Side.NEMESIS: "stream" if swap else "break",
+	}
+	_snap_to(player, board.room_pos(pos[Arch.Side.PLAYER]))
+	_snap_to(nemesis, board.room_pos(pos[Arch.Side.NEMESIS]))
+	_refresh_plan()
+
+
+## Steps a side may walk in one move. Hustle is legs.
+func _steps(side: int) -> int:
+	return 2 + _stat(side, 2) / 2
+
+
+## Rooms this side can reach this move, and at what cost. The other side's
+## room cannot be entered or walked through: standing in a doorway is a move.
+func _reach(side: int) -> Dictionary:
+	return _reach_from(side, pos[side])
+
+
+func _reach_from(side: int, here: String) -> Dictionary:
+	var other := _other(side)
+	var d := board.distances(here, [pos[other]])
+	var out := {}
+	for id in d:
+		if int(d[id]) <= _steps(side):
+			out[id] = int(d[id])
+	return out
+
+
+func _refresh_plan() -> void:
+	if floor_plan == null:
+		return
+	floor_plan.you = pos[Arch.Side.PLAYER]
+	floor_plan.them = pos[Arch.Side.NEMESIS]
+	floor_plan.steps = _steps(Arch.Side.PLAYER)
+
+
+## Apply the board to an option: out of reach is out of the question, and the
+## card says how far it is.
+func _gate(side: int, opt: Dictionary, reach: Dictionary, here: String) -> Dictionary:
+	var room: String = opt["station"]
+	var other := _other(side)
+	if room == pos[other]:
+		opt["enabled"] = false
+		opt["why"] = "your nemesis is standing there"
+	elif not reach.has(room):
+		var far := board.dist(here, room, [pos[other]])
+		opt["enabled"] = false
+		opt["why"] = ("%d steps away, you have %d" % [far, _steps(side)]) if far < 999 else "no way through - they are in the doorway"
+	else:
+		opt["sub"] = str(opt["sub"]) + ("  ·  %d step%s" % [reach[room], "" if reach[room] == 1 else "s"] if reach[room] > 0 else "  ·  here")
+	return opt
+
+
 # --- setup -------------------------------------------------------------------
 
 func _pick_name() -> String:
@@ -228,7 +306,9 @@ func _pick_name() -> String:
 		if not _used_names.has(n):
 			_used_names.append(n)
 			return n
-	return "Colleague %d" % _used_names.size()
+	var fallback := "Colleague %d" % (_used_names.size() + 1)
+	_used_names.append(fallback)
+	return fallback
 
 
 ## Next unused face. The deck refills if the crowd ever outgrows it, which means
@@ -315,6 +395,9 @@ func _begin_round() -> void:
 	occupied = {Arch.Side.PLAYER: "", Arch.Side.NEMESIS: ""}
 	_presented = {Arch.Side.PLAYER: false, Arch.Side.NEMESIS: false}
 	sabotage_log = {Arch.Side.PLAYER: [], Arch.Side.NEMESIS: []}
+	# Everybody back to an end of the building for the round.
+	if round_no > 1:
+		_place_for_round()
 	actions_left = Arch.MOVES_PER_ROUND
 	_refresh_hud()
 	hud.banner("ROUND %d" % round_no, 2.0)
@@ -425,6 +508,8 @@ func _process(_delta: float) -> void:
 		hud.show_prompt("%s  —  present now" % verb)
 	elif _station_id(st) == occupied[Arch.Side.NEMESIS]:
 		hud.show_prompt("your nemesis is standing here")
+	elif not _reach(Arch.Side.PLAYER).has(_station_id(st)):
+		hud.show_prompt("%s is too far this move" % st["label"])
 	else:
 		hud.show_prompt("%s  —  %s" % [verb, st["label"]])
 
@@ -445,10 +530,14 @@ func _station_id(st: Dictionary) -> String:
 ## Every legal move for [param side], each one saying what it would do. The
 ## same list feeds the player's cards and the nemesis's choice, so the AI can
 ## never do something you could not.
-func _options_for(side: int) -> Array:
+## [param from_room] evaluates the board as if the side stood there (for the
+## one-move lookahead); [param lookahead] adds to each card what it opens up
+## next move, so walking to the Lobby is worth what the Lobby is next to.
+func _options_for(side: int, from_room: String = "", lookahead: bool = true) -> Array:
 	var other: int = Arch.Side.NEMESIS if side == Arch.Side.PLAYER else Arch.Side.PLAYER
 	var demand := _demand(side)
 	var opts: Array = []
+	var here: String = pos[side] if from_room == "" else from_room
 
 	for i in range(office.desk_points.size()):
 		var taste: int = office.desk_tastes[i]
@@ -587,7 +676,42 @@ func _options_for(side: int) -> Array:
 		"enabled": true,
 		"value": (2.5 if satchel[side].size() >= Arch.SLIDES_PER_TALK else -1.0),
 	})
+
+	# A pure move: stand in the Lobby, act on nothing, be one step from
+	# everything next move. Its worth is entirely what it opens up.
+	if here != "lobby":
+		opts.append({
+			"id": "lobby", "kind": "lobby", "station": "lobby", "pos": board.room_pos("lobby"),
+			"label": "Walk to the Lobby",
+			"sub": "no action; the hub - every room is close from here",
+			"enabled": true, "why": "",
+			"value": 0.2,
+		})
+
+	# The board has the last word on every card.
+	var reach := _reach_from(side, here)
+	for o in opts:
+		if o.get("enabled", true):
+			_gate(side, o, reach, here)
+
+	# One move of lookahead, on both sides' cards alike: a card is worth what it
+	# does plus half of the best thing it puts within reach. This is what makes
+	# the AI walk to the Lobby to get at the desks instead of rallying in the
+	# Break room four times because nothing else was in range.
+	if lookahead:
+		for o in opts:
+			if o.get("enabled", true) and o["kind"] != "present":
+				o["value"] = float(o["value"]) + 0.5 * _best_next(side, o["station"])
 	return opts
+
+
+## The best immediate value available next move from [param room].
+func _best_next(side: int, room: String) -> float:
+	var best := 0.0
+	for o in _options_for(side, room, false):
+		if o.get("enabled", true) and o["kind"] != "present" and o["kind"] != "lobby":
+			best = maxf(best, float(o["value"]))
+	return best
 
 
 ## How many the stream closes for this side: Sales sells.
@@ -602,7 +726,7 @@ func _chill(side: int) -> float:
 
 
 ## How far this side can reach to buy somebody: hustle, and Sales.
-func _reach(side: int) -> float:
+func _buy_reach(side: int) -> float:
 	return Arch.POACH_RADIUS + 1.5 * float(_stat(side, 2)) + (3.0 if _has(side, Arch.Role.SALES) else 0.0)
 
 
@@ -668,7 +792,7 @@ func _poach_targets(side: int, limit: int = 2) -> Array:
 			if d < best_d:
 				best_d = d
 				best_st = st
-		if best_st.is_empty() or best_d > _reach(side):
+		if best_st.is_empty() or best_d > _buy_reach(side):
 			continue
 		var sid := _station_id(best_st)
 		var prop: Dictionary = satchel[side][card]
@@ -699,9 +823,12 @@ func _player_move() -> void:
 	_busy = true
 	player.auto_target = null
 	_refresh_hud()
+	floor_plan.reach = _reach(Arch.Side.PLAYER)
+	_refresh_plan()
 	planner.offer(round_no, move_no, Arch.MOVES_PER_ROUND, _options_for(Arch.Side.PLAYER),
 		_hand_line(Arch.Side.PLAYER))
 	var opt: Dictionary = await _await_choice()
+	floor_plan.reach = {}
 	if opt.is_empty():
 		await _manual_move()
 		return
@@ -755,6 +882,10 @@ func _on_interact() -> void:
 	if sid == occupied[Arch.Side.NEMESIS]:
 		hud.toast("Your nemesis is standing there.")
 		return
+	if not _reach(Arch.Side.PLAYER).has(sid):
+		hud.toast("Too far for one move: %d steps, you have %d." % [
+			board.dist(pos[Arch.Side.PLAYER], sid, [pos[Arch.Side.NEMESIS]]), _steps(Arch.Side.PLAYER)])
+		return
 	_awaiting_manual = false
 	_busy = true
 	var opt := {}
@@ -773,11 +904,17 @@ func _on_interact() -> void:
 ## Walk to the station (if [param walk]) and do the thing.
 func _execute(side: int, opt: Dictionary, walk: bool) -> void:
 	_busy = true
+	var room: String = opt["station"]
+	var route: Array = board.path(pos[side], room, [pos[_other(side)]])
 	if side == Arch.Side.PLAYER:
 		if walk:
 			_auto = true
 			planner.running(1, 1, "%s…" % opt["label"])
-			await _walk_player_to(opt["pos"])
+			for i in range(route.size()):
+				if not _auto:
+					break
+				planner.running(i + 1, route.size(), "%s…" % opt["label"])
+				await _walk_player_to(board.room_pos(route[i]))
 			planner.close()
 			if not _auto:
 				# Took over on the way: the move is theirs to finish by hand.
@@ -786,10 +923,13 @@ func _execute(side: int, opt: Dictionary, walk: bool) -> void:
 			_auto = false
 			_snap_to(player, opt["pos"])
 	else:
-		await _walk_to(nemesis, opt["pos"])
+		for r in route:
+			await _walk_to(nemesis, board.room_pos(r), 6.0)
 		_snap_to(nemesis, opt["pos"])
 
-	occupied[side] = opt["station"]
+	occupied[side] = room
+	pos[side] = room
+	_refresh_plan()
 	match String(opt["kind"]):
 		"desk":
 			_act_desk(side, int(opt["taste"]))
@@ -811,6 +951,11 @@ func _execute(side: int, opt: Dictionary, walk: bool) -> void:
 			_act_poach(side, opt["target"], int(opt["card"]))
 		"present":
 			await _present(side)
+		"lobby":
+			if side == Arch.Side.PLAYER:
+				hud.toast("You stand in the Lobby. Everything is close from here.")
+			else:
+				hud.toast("They are in the Lobby.")
 	_tick_influencers(side)
 	_refresh_hud()
 	if side == Arch.Side.PLAYER and String(opt["kind"]) != "present":
@@ -820,14 +965,14 @@ func _execute(side: int, opt: Dictionary, walk: bool) -> void:
 ## The walk is the picture; the move is the rule. If a stump or a desk got in
 ## the way, the mover still ends up at the station, for either side, so the
 ## match is never decided by who tripped.
-func _snap_to(who: Node3D, pos: Vector3) -> void:
-	var flat := Vector3(pos.x, who.global_position.y, pos.z)
+func _snap_to(who: Node3D, target: Vector3) -> void:
+	var flat := Vector3(target.x, who.global_position.y, target.z)
 	if who.global_position.distance_to(flat) > 1.2:
 		who.global_position = flat + Vector3(0, 0.05, 0)
 
 
-func _walk_player_to(pos: Vector3, max_time: float = 16.0) -> void:
-	player.auto_target = pos
+func _walk_player_to(target: Vector3, max_time: float = 16.0) -> void:
+	player.auto_target = target
 	var t := 0.0
 	while t < max_time and player.auto_target != null and _auto:
 		await get_tree().process_frame
@@ -1072,7 +1217,7 @@ func _nemesis_choose() -> Dictionary:
 	for o in _options_for(Arch.Side.NEMESIS):
 		if not o.get("enabled", true):
 			continue
-		var v: float = float(o.get("value", 0.0)) + rng.randf() * 0.35
+		var v: float = float(o.get("value", 0.0)) + rng.randf() * 0.1
 		# Do not present before there is anything to say, unless it is the last move.
 		if o["kind"] == "present" and move_no < Arch.MOVES_PER_ROUND and satchel[Arch.Side.NEMESIS].size() < Arch.SLIDES_PER_TALK:
 			continue
@@ -1098,13 +1243,13 @@ func _send_bullies() -> void:
 				hud.toast("One of yours is off to heckle their talk.")
 
 
-func _walk_to(p: Person, pos: Vector3, max_time: float = 12.0) -> void:
-	p.goto(pos)
+func _walk_to(p: Person, target: Vector3, max_time: float = 12.0) -> void:
+	p.goto(target)
 	var t := 0.0
 	while t < max_time:
 		await get_tree().process_frame
 		t += get_process_delta_time()
-		var flat := Vector3(pos.x, p.global_position.y, pos.z)
+		var flat := Vector3(target.x, p.global_position.y, target.z)
 		if p.global_position.distance_to(flat) <= Person.ARRIVE_DIST + 0.2:
 			break
 	p.stop_walking()
@@ -1124,6 +1269,8 @@ func _present(side: int) -> void:
 
 	var assembled := _assemble(side)
 
+	pos[side] = "rock"
+	_refresh_plan()
 	var stage: Vector3 = Office.ROCK_POS + Vector3(0, 1.05, 0)
 	if side == Arch.Side.PLAYER:
 		player.velocity = Vector3.ZERO
